@@ -19,15 +19,11 @@
         return_content: true
       register: response_body
 
-    - name: "Store Token"
-      no_log: true
-      ansible.builtin.shell: 
-        cmd: "ansible-vault encrypt_string \"{{response_body.json.access_token}}\" --vault-id  \"$HOME/ansible-practice/passfile\" --name 'vault_access_token'"
+    - name: "Print Token"
+      ansible.builtin.debug:
+       msg: "{{response_body.json.access_token}}"
       when: response_body.status == 200
-      register: vault_token
+      
+    
 
-    - name: "Display token" 
-      ansible.builtin.copy:
-        content: "{{vault_token.stdout}}"
-        dest: "$HOME/ansible-practice/host_vars/{{inventory_hostname}}/vault_access_token"
-        force: true
+
