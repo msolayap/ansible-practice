@@ -1,0 +1,4 @@
+---
+token_endpoint: "https://login.microsoftonline.com/72b17115-9915-42c0-9f1b-4f98e5a4bcd2/oauth2/v2.0/token"
+grant_type: "client_credentials"
+...

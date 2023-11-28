@@ -1,0 +1,5 @@
+---
+ansible_user: iagdeploy
+ansible_become: false
+ansible_password: !unsafe "C0ntain@r"
+...

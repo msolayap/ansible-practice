@@ -1,0 +1,27 @@
+---
+- name: Vars test - list var
+  hosts: all
+  gather_facts: no
+  become: yes
+  vars:
+    ename:
+      first: murali
+      middle: krishnan
+      last: solayappan
+      empid: 153949
+    ansible_python_version: 3.9
+  tasks:
+    - name: "print full ename of {{ ename.first }}"
+      ansible.builtin.debug:
+        msg: 
+          - "{{ename.first}} {{ename.middle}} {{ename.last}} using {{ansible_python_version}} in {{inventory_hostname}}"
+          - "{{group_names}}"
+      when: ename.empid is defined
+    - name: "shell output check"
+      ansible.builtin.shell:  "echo ${HOME}"
+      register: home_var
+#become: false
+    - name: "display home var"
+      ansible.builtin.debug:
+        msg: "{{home_var.stdout}}"
+        

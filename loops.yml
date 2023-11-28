@@ -12,7 +12,7 @@
       - { f : "archana", l: "murali" }
       - { f : "prathyu", l : "murali" }
 
-   tasks:
+  tasks:
     - name: "display full name"
       ansible.builtin.debug:
         msg: "{{ item }} "
@@ -30,7 +30,7 @@
       loop: "{{ ansible_facts['mounts'] }}"
       loop_control:
         label: "{{ mp.mount }}"
-        pause: 1
+#        pause: 1
 # index tracker var. when using extended, this is not necessary
         index_var: mount_num
 # instead of item, define your own meaningful name
@@ -56,3 +56,51 @@
           - pending
           - blocked
           - hold
+      register: random_state
+
+    - name: dit2items test
+      ansible.builtin.debug:
+        msg: "{{ item.key }} is capital of {{item.value}}"
+      loop: "{{state_capitals|dict2items}}"
+      vars:
+        state_capitals:
+          chennai: tamilnadu
+          mumbai: maharashtra
+          trivandrum: kerala
+          hyderabad: andhra pradesh 
+
+    - name: register test
+      ansible.builtin.shell:  "{{cmd}}"
+      loop:
+        - "id"
+        - "groups"
+        - "echo $SHELL"
+      loop_control:
+        loop_var: cmd
+      register: myoutput
+
+
+    - name: inspect output
+      ansible.builtin.debug:
+        msg: "{{myoutput.results}}"
+
+
+    - name: retry till success
+      ansible.builtin.shell: "~/retry-test.sh 5"
+#      loop: "{{range(3, 6, 1)|list}}"
+#      loop_control:
+#        pause: 1
+      register: retry_result
+      when: inventory_hostname == "dc3auooapppd01a.na.msmps.net"
+      until: retry_result.stdout.find("OK") != -1
+      retries: 1
+      delay: 3
+      vars:
+        ansible_become: false
+
+
+    - name: inspect retried result
+      ansible.builtin.debug:
+        msg: "{{retry_result}}"
+      when: inventory_hostname == "dc3auooapppd01a.na.msmps.net"
+         

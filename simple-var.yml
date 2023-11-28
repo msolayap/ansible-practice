@@ -1,0 +1,15 @@
+---
+- name: Mks playbook
+  hosts: all
+  become: yes
+  vars:
+    first: murali
+    middle: krishnan
+    last: solayappan
+  tasks:
+    - name: "print full name of {{ first }}"
+      ansible.builtin.debug:
+        msg: "{{first}} {{middle}} {{last}} using {{ansible_python_version}}"
+      when: name.first is defined
+    
+    
