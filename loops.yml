@@ -1,0 +1,58 @@
+---
+- name: Data manipulation in playbook
+  hosts: all
+  become: true
+  vars:
+    empname:
+      - murali
+      - krishnan
+      - solayappan
+    emplist:
+      - { f : "murali", l : "solayappan" }
+      - { f : "archana", l: "murali" }
+      - { f : "prathyu", l : "murali" }
+
+   tasks:
+    - name: "display full name"
+      ansible.builtin.debug:
+        msg: "{{ item }} "
+      loop: "{{ empname }}"
+
+
+    - name: "list employees"
+      ansible.builtin.debug:
+        msg: "{{ item.f }} {{ item.l }}"
+      loop:  "{{emplist}}"
+
+    - name: display all facts
+      ansible.builtin.debug:
+         msg: "{{mount_num}}/{{ansible_loop.length}} | {{ mp.mount }} @ {{mp.device}}"
+      loop: "{{ ansible_facts['mounts'] }}"
+      loop_control:
+        label: "{{ mp.mount }}"
+        pause: 1
+# index tracker var. when using extended, this is not necessary
+        index_var: mount_num
+# instead of item, define your own meaningful name
+        loop_var: mp
+# to get additional context on loop execution.
+        extended: true
+
+
+    - name: range test
+      ansible.builtin.debug:
+         msg: "{{item}}"
+      loop: "{{ range(0, 4+1, 2)|list}}"
+
+    - name: "random choice test"
+      ansible.builtin.debug:
+        msg: "{{state|random}}"
+      vars:
+        state:
+          - todo
+          - in_progress
+          - completed
+          - closed
+          - pending
+          - blocked
+          - hold
