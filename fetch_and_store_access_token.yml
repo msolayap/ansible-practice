@@ -1,7 +1,7 @@
 ---
 - name: "Fetch ServiceNow API Access Token"
   hosts: localhost
-  gather_facts: false
+  gather_facts: true
   become: false
   tasks:
     - name: "Fetch Access token"
@@ -19,15 +19,23 @@
         return_content: true
       register: response_body
 
+    - name: "Add fetched time to token data"
+      ansible.builtin.set_fact:
+        token_data: "{{ response_body.json | default([]) | combine({'fetched_time' : ansible_date_time.epoch })}}"
+      when: response_body.status == 200
+
+
+    - name: "Store Token data in a file" 
+      ansible.builtin.copy:
+        content: "{{token_data | to_nice_json}}"
+        dest: "vault_access_token"
+        force: true
+      when: response_body.status == 200
+    
     - name: "Convert Token to Vault variable"
 #   no_log: true
       ansible.builtin.shell: 
-        cmd: "ansible-vault encrypt_string \"{{response_body.json.access_token}}\" --vault-id  \"$HOME/ansible-practice/passfile\" --name 'vault_access_token'"
+        cmd: "ansible-vault encrypt vault_access_token --vault-id  \"$HOME/ansible-practice/passfile\""
       when: response_body.status == 200
       register: vault_token
 
-    - name: "Store Token in vault" 
-      ansible.builtin.copy:
-        content: "{{vault_token.stdout}}"
-        dest: "$HOME/ansible-practice/host_vars/{{inventory_hostname}}/vault_access_token"
-        force: true
