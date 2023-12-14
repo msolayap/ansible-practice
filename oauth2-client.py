@@ -12,7 +12,7 @@ import hmac
 # Oauth libraries
 from oauthlib.oauth2 import BackendApplicationClient
 from requests_oauthlib import OAuth2Session
-from requests.auth import HTTPBasicAuth;
+
 
 token_endpoint="https://login.microsoftonline.com/72b17115-9915-42c0-9f1b-4f98e5a4bcd2/oauth2/v2.0/token"
 client_id = "f5dc7ffd-9be5-407a-b093-56a579ae9d85"
@@ -85,6 +85,6 @@ key_fields = (
 result = response.json();
 attributes = result['result']['attributes'] ;
 
-imp_keys =  {k:v for k,v in attributes.items() if k in key_fields}
+imp_data =  {k:v for k,v in attributes.items() if k in key_fields}
 
-pprint(imp_keys)
+pprint(imp_data);
