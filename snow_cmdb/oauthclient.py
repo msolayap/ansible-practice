@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 # Ansbile libraries
 from ansible.parsing import vault
 from ansible.parsing.vault import VaultSecret
-from ansible.module_utils import to_text, to_bytes, to_native
+from ansible.module_utils._text import to_text, to_bytes, to_native
 
 # Oauth libraries
 from oauthlib.oauth2 import BackendApplicationClient
@@ -23,7 +23,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 #create a log Handler
-fh = logging.FileHandler(filename='snow_inventory_sync.log', mode='a', encoding='utf-8')
+#fh = logging.FileHandler(filename='snow_inventory_sync.log', mode='a', encoding='utf-8')
+fh = logging.StreamHandler();
 
 #set Handler config
 fh.setLevel(logging.DEBUG)
@@ -72,7 +73,7 @@ class OAuthToken:
 
     
     def __init__(self, 
-                 token:str, 
+                 token:str,
                  token_expires_in:int=0, 
                  token_fetched_time=datetime.now(),
                  token_type:str="Bearer", **kwargs):
@@ -149,6 +150,7 @@ class Credentials:
                  scope=None,
                  api_key=None,
                  api_secure_key=None,
+                 token_endpoint=None,
                  json_data=None):
         
         
@@ -159,22 +161,26 @@ class Credentials:
         else:
             self._client_id =  client_id;
             self._client_secret = client_secret;
-            self._scope=scope;
-            self._api_key=api_key;
-            self._api_secure_key=api_secure_key;
+            self._scope         = scope;
+            self._api_key       = api_key;
+            self._api_secure_key = b"api_secure_key"
+            self._token_endpoint       = token_endpoint
             
             
     def from_json(self, json_data):
-        
+
         try:
             cred_dict = json.loads(json_data);
-            self.client_id = cred_dict['client_id'];
-            self.client_secret = cred_dict['client_secret'];
-            self.api_key = cred_dict['api_key'];
-            self.api_secure_key = cred_dict['api_secure_key'];    
+            self._client_id     = cred_dict['client_id'];
+            self._client_secret = cred_dict['client_secret'];
+            self._api_key       = cred_dict['api_key'];
+            self._api_secure_key = cred_dict['api_secure_key'];    
+            self._token_endpoint = cred_dict['token_endpoint'];    
+            self._scope = cred_dict['scope'];    
         
         except Exception as e:
-            logger.warning("Error while loading credentials from json string")
+            logger.exception("Error while loading credentials from json string")
+
 
     @property
     def client_id(self):
@@ -195,13 +201,17 @@ class Credentials:
     @property
     def api_secure_key(self):
         return(self._api_secure_key);
-    
+
+
+
 class SnowApiAuth:
+
+    """Class to represet authentication object and its actions like refresh_token"""
 
     def __init__(self, credentials_obj:Credentials):
         
         self._credentials = credentials_obj
-        oauth_client  = BackendApplicationClient(self._credentials.client_id)
+        oauth_client  = BackendApplicationClient(self._credentials._client_id);
         self._session = OAuth2Session(client=oauth_client)
         self._token   = None;
 
@@ -220,10 +230,10 @@ class SnowApiAuth:
             
             token_response = self.session.fetch_token(
 
-                token_url = self._credentials.token_endpoint,
-                client_id = self._credentials.client_id, 
-                client_secret = self._credentials.client_secret, 
-                scope = self._credentials.scope
+                token_url = self._credentials._token_endpoint,
+                client_id = self._credentials._client_id, 
+                client_secret = self._credentials._client_secret, 
+                scope = self._credentials._scope
                 
                 );
             
@@ -244,39 +254,13 @@ class SnowApiAuth:
             
             return(False)
 
-# class credentials_store():
-#     """Base class for credentials store. just define a dict key based store"""
 
-#     def __init__(self, storekey, cred:credentials):
-#         self._credentials[storekey] = cred
-#         pass
-    
-#     def get_credentials(self, storekey):
-#         return(self._credentials.get(storekey, None))
-    
-#     def store_credentials(self, storekey, cred:credentials):
-#         self._credentials[storekey] = cred ;
-    
-    
 class CredentialsStoreVault():
 
     def __init__(self, vault_file, vault_key_file):
 
         self._vault_file =  vault_file;
         self._vault_key_file = vault_key_file
-
-    def get_credentials_dummy(self):
-
-        dummy_vault_content = {
-            'token_endpoint' : "https://login.microsoftonline.com/72b17115-9915-42c0-9f1b-4f98e5a4bcd2/oauth2/v2.0/token",
-            'client_id'      : r"f5dc7ffd-9be5-407a-b093-56a579ae9d85",
-            'client_secret'  : r"kOy8Q~jxyWde~AiNzYjdG_gZdc1ljO6ERDyzvcPw",
-            'api_key'        : r"APPKEY759512020091415435175420415",
-            'api_secure_key' : b"AKI030662020091415435175463219",
-            'scope'          : "api://f5dc7ffd-9be5-407a-b093-56a579ae9d85/.default"            
-        }
-
-        return( Credentials(json_data=dummy_vault_content) )
 
     def get_credentials(self):
         try:
@@ -297,11 +281,11 @@ class CredentialsStoreVault():
                     return (Credentials(json_data=decrypted_data));
     
         except Exception as e:
-            logger.error("Cannot Open vault_file %s", self._vault_file)
+            logger.exception("Cannot Open vault_file %s", self._vault_file)
 
 #"https://lumen.service-now.com/api/now/cmdb/instance/u_cmdb_ci_other_server/6ecb870f1beb49101504edf1b24bcb81",
 
-class snow_cmdb_api:
+class SnowCmdbApi:
     servicenow_domain = "servcice-now.com"
     cmdb_instance_api_path = "/api/now/cmdb/instance/"
 
@@ -329,14 +313,15 @@ class SnowCmdbCI:
     pass
 
 
-vault_file          = "./vault_lumen_snow"
-vault_password_file = "./lumen_snow_password"
+base_dir="/data01/home/ansible/ansible-practice/snow_cmdb"
+vault_file          = base_dir + "/vault_lumen_snow"
+vault_password_file = base_dir + "/vault_password_file" ;
 
 credstore = CredentialsStoreVault(vault_file, vault_password_file);
 
-cred = credstore.get_credentials_dummy()
+cred = credstore.get_credentials()
 
-auth = snow_api_auth(cred);
+auth = SnowApiAuth(cred);
 
 auth.refresh_token();
 
