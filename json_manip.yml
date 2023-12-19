@@ -1,0 +1,19 @@
+---
+- name: "Playbook to add an item to json data"
+  hosts: localhost
+  gather_facts: no
+  become: no
+  vars:
+    emp:
+      first: "murali"
+      last: "solayappan"
+      empid: 153949
+
+  tasks:
+    - name: "show current var"
+      ansible.builtin.debug:
+        msg:
+          - "{{emp}}"
+          - "{{emp | combine({'middle' : 'krishnan'})}}"
+      when: emp is defined
+

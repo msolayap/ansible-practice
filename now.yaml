@@ -1,0 +1,21 @@
+---
+instance: lumen
+client_id: "f5dc7ffd-9be5-407a-b093-56a579ae9d85"
+client_secret: "kOy8Q~jxyWde~AiNzYjdG_gZdc1ljO6ERDyzvcPw"
+grant_type: "client_credentials"
+plugin: servicenow.itsm.now
+query:
+  - os: = Linux Red Hat
+  - os: = Windows
+keyed_groups:
+  - key: os
+    prefix: os
+inventory_hostname_source: name
+columns:
+  - name
+  - classification
+  - ip_address
+compose:
+  ansible_host: name
+table: cmdb_ci_server
+enhanced: false

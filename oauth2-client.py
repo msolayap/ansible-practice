@@ -54,7 +54,7 @@ query_params = {
 
 #pprint(api_headers);
 #print();
-response = requests.get(
+response = oauth_session.get(
     "https://lumen.service-now.com/api/now/cmdb/instance//u_cmdb_ci_other_server/6ecb870f1beb49101504edf1b24bcb81",
     headers=api_headers,
     params=query_params
@@ -86,5 +86,4 @@ result = response.json();
 attributes = result['result']['attributes'] ;
 
 imp_data =  {k:v for k,v in attributes.items() if k in key_fields}
-
 pprint(imp_data);
