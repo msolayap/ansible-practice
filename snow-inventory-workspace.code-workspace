@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"name": "ias-infra-iag",
+			"path": "../../AA_ITENTIAL/IAG/ias-infra-iag"
+		},
+		{
+			"name": "servicenow.itsm",
+			"path": "../../AA_ITENTIAL/IAG/servicenow.itsm"
+		}
+	],
+	"settings": {}
+}
