@@ -339,18 +339,90 @@ class SnowCmdbApi:
     def get_cmdb_class_url(self, cmdb_class):
         return ( "{0}/{1}".format(self.api_url.strip('/'), cmdb_class.strip('/')) );
 
-    def get_class_ci_list(self, classname):
-        _url = self.get_cmdb_class_url(classname)
-        _qparams = { 
-            'sysparm_limit' : 5
-        }
-        response = self.authenticated_session.session.get(
-            _url, 
-            params=_qparams
-        );
-        logger.debug("response code: {}".format(response.status_code))
+    
         
-        return(response.json());
+    def get_class_ci_total_count(self, class_url, offset=0, limit=1):
+        total_count = 0;
+    
+        _qparams = {
+            'sysparm_offset':  offset,
+            'sysparm_limit' :  limit
+        }
+        try:
+            logger.debug("Trying to get total ci record counts in the class")
+            logger.debug("class url: {}".format(class_url));
+
+            resp =  self.authenticated_session.session.get(
+                class_url,
+                params=_qparams
+            )
+            logger.debug("response code: {}".format(resp.status_code))
+
+            total_count = resp.headers['X-Total-Count'] ;
+
+        except Exception as e:
+            
+            logger.exception("Error occured while getting ci list page")
+            logger.warning("Error while fetching: {}".format(class_url))
+
+        return(total_count)
+
+
+    def get_ci_list_page(self, class_url, offset=0, limit=1000):
+        
+        ci_list = []
+
+        _qparams = {
+            'sysparm_offset':  offset,
+            'sysparm_limit' :  limit
+        }
+        try:
+
+            resp =  self.authenticated_session.session.get(
+                class_url,
+                params=_qparams
+            )
+            logger.debug("response code: {}".format(resp.status_code))
+
+            resp_json = resp.json();
+            result = resp_json['result'] ;
+
+            for ci_record in result:
+                ci_list.append(ci_record['sys_id']);
+
+        except Exception as e:
+            
+            logger.exception("Error occured while getting ci list page")
+            logger.warning("Error while fetching: {}".format(class_url))
+
+        return(ci_list);
+    
+    def get_class_ci_list(self, classname, page_limit):
+        
+        resultset = [];
+        offset = 0;
+        
+        _url = self.get_cmdb_class_url(classname)
+        
+        class_ci_count = self.get_class_ci_total_count(_url)
+
+        logger.debug("pagination range object: start: {} stop: {} page_limit: {}".format(offset+1, class_ci_count, page_limit))
+
+        class_ci_count = 100;
+        try:
+
+            for next_offset in range(offset+1, class_ci_count, page_limit):
+
+                ci_sysid_list = self.get_ci_list_page(_url, next_offset, page_limit);
+
+                resultset += ci_sysid_list
+        
+        except Exception as e:
+        
+            logger.exception("Error occured while getting ci_list for class {}".format(classname))
+
+        return(resultset);
+        
 
 class SnowCmdbCI:
     pass
@@ -363,8 +435,8 @@ vault_file          = base_dir + "/vault_lumen_snow"
 vault_password_file = base_dir + "/vault_password_file" ;
 
 cmdb_class_config = {
-    'cmdb_ci_server' : {
-        'groupname' : 'linux_servers',
+    'cmdb_ci_storage_server' : {
+        'groupname' : 'storage_servers',
         'key_attrs' : [
             'operational_status',
             'classification',
@@ -396,7 +468,7 @@ auth.refresh_token();
 snow_api = SnowCmdbApi('lumen', auth, page_limit=10)
 
 for cmdb_class in cmdb_class_config:
-    ci_list = snow_api.get_class_ci_list(cmdb_class)
+    ci_list = snow_api.get_class_ci_list(cmdb_class, 10)
     print("list of CIs in class {}".format(cmdb_class))
     print("-------------------------------------------")
     print(ci_list);
