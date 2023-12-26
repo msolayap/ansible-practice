@@ -2,6 +2,8 @@
 import time
 import json
 import logging
+import hmac
+import hashlib
 
 from datetime import datetime
 from pprint import pprint
@@ -223,6 +225,10 @@ class SnowApiAuth:
     def token(self):
         return(self._token);
 
+    @property
+    def credentials(self):
+        return(self._credentials);
+
 
     def refresh_token(self):
         
@@ -286,11 +292,12 @@ class CredentialsStoreVault():
 #"https://lumen.service-now.com/api/now/cmdb/instance/u_cmdb_ci_other_server/6ecb870f1beb49101504edf1b24bcb81",
 
 class SnowCmdbApi:
-    servicenow_domain = "servcice-now.com"
+    servicenow_domain = "service-now.com"
     cmdb_instance_api_path = "/api/now/cmdb/instance/"
 
-    def __init__(self, instance, base_url=None, cmdb_api_path=None, scheme='https'):
+    def __init__(self, instance, auth_session, base_url=None, cmdb_api_path=None, scheme='https', page_limit=1000):
         self.instance = instance ;
+        self.authenticated_session = auth_session ;
         
         if not base_url:
             self._base_url = f"{scheme}://{self.instance}.{self.servicenow_domain}"
@@ -299,8 +306,32 @@ class SnowCmdbApi:
             self._cmdb_api_path = self.cmdb_instance_api_path
 
         self._api_url = f"{self._base_url.strip('/')}/{self._cmdb_api_path.strip('/')}"
+        self._page_limit = page_limit
+        
+        _epochTime = str(int(time.time())) ;
+        
+        logger.debug("epochtime: {}".format(_epochTime));
 
+        _x_digest = hmac.new(auth_session.credentials.api_secure_key.encode(), _epochTime.encode(), digestmod=hashlib.sha256).hexdigest();
+        
+        logger.debug("x_digest: {}".format(_x_digest))
+        logger.debug("token_type: {}".format(auth_session.token.token_type));
+        
+        self._api_request_headers= {
+            'Authorization' : "%s %s" % (auth_session.token.token_type, auth_session.token.access_token),
+            'X-Digest' : _x_digest,
+            'X-Digest-Time' : _epochTime,
+            'X-Application-Key': auth_session.credentials.api_key,
+            'Accept' : 'application/json'
+        }
+        # directly set the headers in the session object instead of passing in get
+        self.authenticated_session.session.headers.update(self._api_request_headers) ;
+     
 
+    @property
+    def api_request_headers(self):
+        return(self._api_request_headers)
+    
     @property
     def api_url(self):
         return(self._api_url);
@@ -308,14 +339,51 @@ class SnowCmdbApi:
     def get_cmdb_class_url(self, cmdb_class):
         return ( "{0}/{1}".format(self.api_url.strip('/'), cmdb_class.strip('/')) );
 
+    def get_class_ci_list(self, classname):
+        _url = self.get_cmdb_class_url(classname)
+        _qparams = { 
+            'sysparm_limit' : 5
+        }
+        response = self.authenticated_session.session.get(
+            _url, 
+            params=_qparams
+        );
+        logger.debug("response code: {}".format(response.status_code))
+        
+        return(response.json());
 
 class SnowCmdbCI:
     pass
+
+## main code
 
 
 base_dir="/data01/home/ansible/ansible-practice/snow_cmdb"
 vault_file          = base_dir + "/vault_lumen_snow"
 vault_password_file = base_dir + "/vault_password_file" ;
+
+cmdb_class_config = {
+    'cmdb_ci_server' : {
+        'groupname' : 'linux_servers',
+        'key_attrs' : [
+            'operational_status',
+            'classification',
+            'last_discovered',
+            'sys_class_name',
+            'fqdn',
+            'sys_id',
+            'ip_address',
+            'category',
+            'host_name',
+            'name',
+            'subcategory',
+            'used_for',
+            'virtual',
+            'discovery_source'
+        ],
+        'hostname_scan_order': ['ip_address','fqdn','host_name', 'name']
+    }
+}
 
 credstore = CredentialsStoreVault(vault_file, vault_password_file);
 
@@ -325,5 +393,15 @@ auth = SnowApiAuth(cred);
 
 auth.refresh_token();
 
-print(auth.token.access_token);
+snow_api = SnowCmdbApi('lumen', auth, page_limit=10)
+
+for cmdb_class in cmdb_class_config:
+    ci_list = snow_api.get_class_ci_list(cmdb_class)
+    print("list of CIs in class {}".format(cmdb_class))
+    print("-------------------------------------------")
+    print(ci_list);
+
+
+#print(auth.token.access_token);
+
 
