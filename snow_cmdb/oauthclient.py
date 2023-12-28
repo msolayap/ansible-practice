@@ -4,7 +4,6 @@ import json
 import logging
 import hmac
 import hashlib
-import atexit 
 import re
 
 from datetime import datetime
@@ -14,7 +13,7 @@ from abc import ABC, abstractmethod
 # Ansbile libraries
 from ansible.parsing import vault
 from ansible.parsing.vault import VaultSecret
-from ansible.module_utils._text import to_text, to_bytes, to_native
+from ansible.module_utils._text import to_bytes
 
 # Oauth libraries
 from oauthlib.oauth2 import BackendApplicationClient
@@ -165,7 +164,7 @@ class Credentials:
             self._scope = cred_dict['scope'];    
         
         except Exception as e:
-            logger.exception("Error while loading credentials from json string")
+            logging.exception("Error while loading credentials from json string")
 
 
     @property
@@ -240,12 +239,12 @@ class SnowApiAuth:
     
         except Exception as e:
             
-            logger.exception("Error while getting new token")
+            logging.exception("Error while getting new token")
             
             return(False)
 
 
-class CredentialsStoreVault():
+class CredentialsStoreVault:
 
     def __init__(self, vault_file, vault_key_file):
 
@@ -270,7 +269,7 @@ class CredentialsStoreVault():
                     return (Credentials(json_data=decrypted_data));
     
         except Exception as e:
-            logger.exception("Cannot Open vault_file %s", self._vault_file)
+            logging.exception("Cannot Open vault_file %s", self._vault_file)
 
 #"https://lumen.service-now.com/api/now/cmdb/instance/u_cmdb_ci_other_server/6ecb870f1beb49101504edf1b24bcb81",
 
@@ -325,6 +324,10 @@ class SnowCmdbCIParser(ABC):
         pass
 
     @abstractmethod
+    def valid_hostname_or_ip(self, ci_name):
+        pass
+
+    @abstractmethod
     def is_active_ci(self):
         pass
         
@@ -351,7 +354,7 @@ class SnowCmdbCIGenericParser(SnowCmdbCIParser):
         
         ci_identifier = next((val for val in id_candidates if val.strip() !=  ""), None)
         
-        #logger.debug("discovered ci identifier: {}".format(ci_identifier))
+        #logging.debug("discovered ci identifier: {}".format(ci_identifier))
 
         return(ci_identifier)
 
@@ -361,6 +364,22 @@ class SnowCmdbCIGenericParser(SnowCmdbCIParser):
         picked_attribs = {k:v for k,v in self.ci_details.items() if k in req_attribs}
         return(picked_attribs);
 
+    @classmethod
+    def valid_hostname_or_ip(cls, ci_name):
+        """
+        if none of the scanned fields have valid name or
+        if the name contains only numerical values e.g 1588383.9298
+        skip this ci - not useful
+
+        """
+        if( (ci_name is None) or 
+            re.match(r'^\d{4,}', ci_name) or
+            re.search(r'[^a-z0-9\-.]', ci_name, re.IGNORECASE)
+            ): 
+            return(False)
+        else:
+            return(True)
+    
     # method to verify validity of the CI record for sync
     def is_active_ci(self):
         
@@ -368,7 +387,7 @@ class SnowCmdbCIGenericParser(SnowCmdbCIParser):
              self.is_true(self.ci_details.get('install_status', False)) and 
              self.is_true(self.ci_details.get('operational_status', False))
            ):
-            #logger.debug("Active CI")
+            #logging.debug("Active CI")
             return (True)
         else:
             return(False)
@@ -377,7 +396,7 @@ class SnowCmdbApi:
     servicenow_domain = "service-now.com"
     cmdb_instance_api_path = "/api/now/cmdb/instance/"
 
-    def __init__(self, instance, auth_session, base_url=None, cmdb_api_path=None, scheme='https', page_limit=1000):
+    def __init__(self, instance, auth_session, base_url=None, cmdb_api_path=None, scheme='https', page_limit=1000, test_ci_count=40):
         self.instance = instance ;
         self.authenticated_session = auth_session ;
         
@@ -389,6 +408,7 @@ class SnowCmdbApi:
 
         self._api_url = f"{self._base_url.strip('/')}/{self._cmdb_api_path.strip('/')}"
         self._page_limit = page_limit
+        self._test_ci_count = test_ci_count ;
         
         _epochTime = str(int(time.time())) ;
         
@@ -426,7 +446,7 @@ class SnowCmdbApi:
         }
         try:
             
-            logger.debug("class url: {}".format(class_url));
+            logging.debug("class url: {}".format(class_url));
 
             resp =  self.authenticated_session.session.get(
                 class_url,
@@ -437,10 +457,10 @@ class SnowCmdbApi:
 
         except Exception as e:
             
-            logger.exception("Error occured while getting ci list page")
-            logger.warning("Error while fetching: {}".format(class_url))
+            logging.exception("Error occured while getting ci list page")
+            logging.warning("Error while fetching: {}".format(class_url))
 
-        return(int(total_count))
+        return(min(self._test_ci_count, int(total_count)))
         
 
 
@@ -467,17 +487,19 @@ class SnowCmdbApi:
 
         except Exception as e:
             
-            logger.exception("Error occured while getting ci list page")
-            logger.warning("Error while fetching: {}".format(class_url))
+            logging.exception("Error occured while getting ci list page")
+            logging.warning("Error while fetching: {}".format(class_url))
 
         return(ci_list);
+
+        
     
     def get_class_ci_list(self, classname, page_limit=None):
         
         resultset = [];
         offset = 0;
 
-        if ( page_limit == None):
+        if ( page_limit is None):
             if(self._page_limit > 0 ):
                 page_limit = self._page_limit
             else:
@@ -487,8 +509,7 @@ class SnowCmdbApi:
         
         class_ci_count = self.get_class_ci_total_count(_url)
 
-        logger.debug("pagination range object: start: {} stop: {} page_limit: {}".format(offset+1, class_ci_count, page_limit))
-
+        logging.debug("pagination range object: start: {} stop: {} page_limit: {}".format(offset+1, class_ci_count, page_limit))
                 
         try:
 
@@ -496,13 +517,14 @@ class SnowCmdbApi:
 
                 ci_sysid_list = self.get_ci_list_page(_url, next_offset, page_limit);
 
-                resultset += ci_sysid_list
+                #resultset += ci_sysid_list
+                yield( ci_sysid_list )
         
         except Exception as e:
         
-            logger.exception("Error occured while getting ci_list for class {}".format(classname))
+            logging.exception("Error occured while getting ci_list for class {}".format(classname))
 
-        return(resultset);
+        #return(resultset);
 
     
     def get_ci_details(self, classname, ci_id_list, class_config):
@@ -529,24 +551,18 @@ class SnowCmdbApi:
                 # one of the ip_address, fqdn, host_name, name, etc.,
 
                 ci_name        = ci_parser.discover_ci_identifier(class_config['hostname_scan_order']);
-                                
-                if( (ci_name is None) or 
-                     re.match(r'^\d{4,}', ci_name) or
-                     re.search(r'[^a-z0-9\-.]', ci_name, re.IGNORECASE)
-                     ): 
-                    """
-                    if none of the scanned fields have valid name or
-                    if the name contains only numerical values e.g 1588383.9298
-                    skip this ci - not useful
 
-                    """
-                    #logger.debug("ci_name is none or number skipping ci record {}".format(ci_id))
+                
+                if(not ci_parser.valid_hostname_or_ip(ci_name)):
+                
                     continue;
+                
                 elif not ci_parser.is_active_ci():
                      """ CI not yet installed or operational """
+                
                      continue;
                 
-                #logger.debug("ci record valid, picking required fields")
+                #logging.debug("ci record valid, picking required fields")
                 req_ci_attribs = ci_parser.pickup_required_attributes(class_config['req_attribs'])
                 req_ci_attribs.update({'x_ci_identifier': ci_name})
                 
@@ -555,75 +571,7 @@ class SnowCmdbApi:
 
         except Exception as e:
 
-            logger.exception("Exception occured while getting ci_details")
+            logging.exception("Exception occured while getting ci_details")
 
         return(ci_details)                
 
-
-
-## main code
-
-
-base_dir="/data01/home/ansible/ansible-practice/snow_cmdb"
-vault_file          = base_dir + "/vault_lumen_snow"
-vault_password_file = base_dir + "/vault_password_file" ;
-
-cmdb_class_config = {
-    'u_cmdb_ci_other_server' : {
-        'groupname' : 'other_servers',
-        'req_attribs' : [
-            'classification',
-            #'sys_class_name',
-            #'sys_id',
-            'category',
-            'subcategory'
-            'os'
-        ],
-        'hostname_scan_order': ['ip_address','fqdn','name','host_name']
-        
-    }
-}
-start = time.time();
-
-def end_tasks():
-    end = time.time();
-    print("\nFinished in -> {:.2f} seconds".format(round((end - start), 2)));
-
-atexit.register(end_tasks)
-
-#### logger ###
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-#create a log Handler
-#fh = logging.FileHandler(filename='snow_inventory_sync.log', mode='a', encoding='utf-8')
-fh = logging.StreamHandler();
-
-#set Handler config
-fh.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d-%H:%M:%S')
-fh.setFormatter(formatter);
-logger.addHandler(fh)
-##########################
-
-dev_page_limit = 5000;
-
-credstore = CredentialsStoreVault(vault_file, vault_password_file);
-
-cred = credstore.get_credentials()
-
-auth = SnowApiAuth(cred);
-
-auth.refresh_token();
-
-snow_api = SnowCmdbApi('lumen', auth, page_limit=dev_page_limit)
-
-host_count = 0
-for cmdb_class in cmdb_class_config:
-    ci_list = snow_api.get_class_ci_list(cmdb_class)
-    ci_details_list = snow_api.get_ci_details(cmdb_class, ci_list, cmdb_class_config[cmdb_class])
-    pprint(ci_details_list)
-    
- 
- #print("{} hosts added to inventory".format(host_count))
