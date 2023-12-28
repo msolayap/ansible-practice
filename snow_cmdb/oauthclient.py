@@ -21,30 +21,6 @@ from oauthlib.oauth2 import BackendApplicationClient
 from requests_oauthlib import OAuth2Session
 
 
-start = time.time();
-
-def end_tasks():
-    end = time.time();
-    print("\nFinished in -> {:.2f} seconds".format(round((end - start), 2)));
-
-atexit.register(end_tasks)
-
-#### logger ###
-#set logger config
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-#create a log Handler
-#fh = logging.FileHandler(filename='snow_inventory_sync.log', mode='a', encoding='utf-8')
-fh = logging.StreamHandler();
-
-#set Handler config
-fh.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d-%H:%M:%S')
-fh.setFormatter(formatter);
-logger.addHandler(fh)
-##########################
-
 class OAuthToken:
 
     """Class to hold Token information and provides verification methods for the validity of the token
@@ -283,8 +259,7 @@ class CredentialsStoreVault():
             
             with open(self._vault_file, "r") as vf:
                 encrypted_data = vf.read()
-                logger.info("Vault content read")
-                
+                                
                 vault_ref = vault.VaultLib(
                     [("default", VaultSecret(_bytes=to_bytes(vault_password.strip())))]
                 )
@@ -301,30 +276,36 @@ class CredentialsStoreVault():
 
 class SnowCmdbCIParser(ABC):
 
-    true_expression = re.compile(r'^(1|true|yes)$', re.IGNORECASE)
-    false_expression = re.compile(r'^(0|false|no)$', re.IGNORECASE)
+    true_expression = re.compile(r'^(true|yes)$', re.IGNORECASE)
+    false_expression = re.compile(r'^(false|no)$', re.IGNORECASE)
 
     @classmethod
     def is_true(cls, val):
         if isinstance( val , str ):
-            if( cls.true_expression.match( val ) ):
+            if(0 < int(val) ):
+                """for values like 6, 7, 8 instead of 1"""
+                return(True)
+            elif( cls.true_expression.match( val ) ):
+                """ true or yes"""
                 return(True)
             else:
-                return(False);
-    
+                return(False)
+            
         return( bool(val) )
     
     @classmethod
     def is_false(cls, val):
         if isinstance( val , str ):
+            if(1 > int(val)):
+                """ for values like 0 or lesser"""
+                return(True)
             if( cls.false_expression.match( val ) ):
+                """ false or no"""
                 return(True)
             else:
                 return(False);
     
         return( not bool(val) )
-
-
 
     def __init__(self, ci_details:dict=None):
         if(ci_details):
@@ -370,7 +351,7 @@ class SnowCmdbCIGenericParser(SnowCmdbCIParser):
         
         ci_identifier = next((val for val in id_candidates if val.strip() !=  ""), None)
         
-        logger.debug("discovered ci identifier: {}".format(ci_identifier))
+        #logger.debug("discovered ci identifier: {}".format(ci_identifier))
 
         return(ci_identifier)
 
@@ -383,11 +364,11 @@ class SnowCmdbCIGenericParser(SnowCmdbCIParser):
     # method to verify validity of the CI record for sync
     def is_active_ci(self):
         
-        if ( self.is_true(self.ci_details.get('install_status', False)) and 
-             self.is_true(self.ci_details.get('operational_status', False)) and
-             self.is_true(self.ci_details.get('skip_sync', False)) and 
-             self.is_false(self.ci_details.get('unverified', True))
-             ):
+        if ( self.ci_details['hardware_status'] == "installed" and
+             self.is_true(self.ci_details.get('install_status', False)) and 
+             self.is_true(self.ci_details.get('operational_status', False))
+           ):
+            #logger.debug("Active CI")
             return (True)
         else:
             return(False)
@@ -411,12 +392,7 @@ class SnowCmdbApi:
         
         _epochTime = str(int(time.time())) ;
         
-        logger.debug("epochtime: {}".format(_epochTime));
-
         _x_digest = hmac.new(auth_session.credentials.api_secure_key.encode(), _epochTime.encode(), digestmod=hashlib.sha256).hexdigest();
-        
-        logger.debug("x_digest: {}".format(_x_digest))
-        logger.debug("token_type: {}".format(auth_session.token.token_type));
         
         self._api_request_headers= {
             'Authorization' : "%s %s" % (auth_session.token.token_type, auth_session.token.access_token),
@@ -439,8 +415,7 @@ class SnowCmdbApi:
 
     def get_cmdb_class_url(self, cmdb_class):
         return ( "{0}/{1}".format(self.api_url.strip('/'), cmdb_class.strip('/')) );
-
-    
+ 
         
     def get_class_ci_total_count(self, class_url, offset=0, limit=1):
         total_count = 0;
@@ -450,15 +425,14 @@ class SnowCmdbApi:
             'sysparm_limit' :  limit
         }
         try:
-            logger.debug("Trying to get total ci record counts in the class")
+            
             logger.debug("class url: {}".format(class_url));
 
             resp =  self.authenticated_session.session.get(
                 class_url,
                 params=_qparams
             )
-            logger.debug("response code: {}".format(resp.status_code))
-
+            
             total_count = resp.headers['X-Total-Count'] ;
 
         except Exception as e:
@@ -466,7 +440,7 @@ class SnowCmdbApi:
             logger.exception("Error occured while getting ci list page")
             logger.warning("Error while fetching: {}".format(class_url))
 
-        return(dev_page_limit if run_mode == "dev" else int(total_count))
+        return(int(total_count))
         
 
 
@@ -484,8 +458,7 @@ class SnowCmdbApi:
                 class_url,
                 params=_qparams
             )
-            logger.debug("response code: {}".format(resp.status_code))
-
+            
             resp_json = resp.json();
             result = resp_json['result'] ;
 
@@ -516,8 +489,7 @@ class SnowCmdbApi:
 
         logger.debug("pagination range object: start: {} stop: {} page_limit: {}".format(offset+1, class_ci_count, page_limit))
 
-        # uncomment the following in dev/test mode.
-        
+                
         try:
 
             for next_offset in range(offset+1, class_ci_count, int(page_limit)):
@@ -547,8 +519,6 @@ class SnowCmdbApi:
                 ci_url = "{}/{}".format(_url.strip('/'), ci_id)
                 resp = self.authenticated_session.session.get(ci_url)
 
-                logger.debug("get ci_details sys_id: {} response code: {}".format(ci_id, resp.status_code))
-
                 resp_json  = resp.json()
                 ci_attribs = resp_json['result']['attributes']
                 
@@ -559,19 +529,26 @@ class SnowCmdbApi:
                 # one of the ip_address, fqdn, host_name, name, etc.,
 
                 ci_name        = ci_parser.discover_ci_identifier(class_config['hostname_scan_order']);
-                logger.debug("obtained ci identifier for sys_id: {}, ci_name: {} ".format(ci_id, ci_name))
-                
-                if(ci_name is None): 
-                    """skip this ci - not useful"""
-                    logger.debug("ci_name is none skipping ci record {}".format(ci_id))
+                                
+                if( (ci_name is None) or 
+                     re.match(r'^\d{4,}', ci_name) or
+                     re.search(r'[^a-z0-9\-.]', ci_name, re.IGNORECASE)
+                     ): 
+                    """
+                    if none of the scanned fields have valid name or
+                    if the name contains only numerical values e.g 1588383.9298
+                    skip this ci - not useful
+
+                    """
+                    #logger.debug("ci_name is none or number skipping ci record {}".format(ci_id))
                     continue;
                 elif not ci_parser.is_active_ci():
-                    logger.debug("ci not active skipping ci record {}".format(ci_id))
-                    pprint(ci_attribs)
-                    continue;
+                     """ CI not yet installed or operational """
+                     continue;
                 
+                #logger.debug("ci record valid, picking required fields")
                 req_ci_attribs = ci_parser.pickup_required_attributes(class_config['req_attribs'])
-                req_ci_attribs.update(('x_ci_identifier', ci_name))
+                req_ci_attribs.update({'x_ci_identifier': ci_name})
                 
                 # add the ci record to the result list to return
                 ci_details.append(req_ci_attribs)
@@ -596,8 +573,8 @@ cmdb_class_config = {
         'groupname' : 'other_servers',
         'req_attribs' : [
             'classification',
-            'sys_class_name',
-            'sys_id',
+            #'sys_class_name',
+            #'sys_id',
             'category',
             'subcategory'
             'os'
@@ -606,9 +583,31 @@ cmdb_class_config = {
         
     }
 }
+start = time.time();
 
-run_mode = "dev"
-dev_page_limit = 100;
+def end_tasks():
+    end = time.time();
+    print("\nFinished in -> {:.2f} seconds".format(round((end - start), 2)));
+
+atexit.register(end_tasks)
+
+#### logger ###
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+#create a log Handler
+#fh = logging.FileHandler(filename='snow_inventory_sync.log', mode='a', encoding='utf-8')
+fh = logging.StreamHandler();
+
+#set Handler config
+fh.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d-%H:%M:%S')
+fh.setFormatter(formatter);
+logger.addHandler(fh)
+##########################
+
+dev_page_limit = 5000;
 
 credstore = CredentialsStoreVault(vault_file, vault_password_file);
 
@@ -626,6 +625,5 @@ for cmdb_class in cmdb_class_config:
     ci_details_list = snow_api.get_ci_details(cmdb_class, ci_list, cmdb_class_config[cmdb_class])
     pprint(ci_details_list)
     
-    
-    
-print("{} hosts added to inventory".format(host_count))
+ 
+ #print("{} hosts added to inventory".format(host_count))
