@@ -448,12 +448,13 @@ class SnowCmdbApi:
             
             logging.debug("class url: {}".format(class_url));
 
-            resp =  self.authenticated_session.session.get(
+            with self.authenticated_session.session.get(
                 class_url,
-                params=_qparams
-            )
+                params=_qparams,
+                stream=True
+            ) as resp:
             
-            total_count = resp.headers['X-Total-Count'] ;
+                total_count = resp.headers['X-Total-Count'] ;
 
         except Exception as e:
             
