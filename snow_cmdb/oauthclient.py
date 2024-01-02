@@ -448,20 +448,21 @@ class SnowCmdbApi:
             
             logging.debug("class url: {}".format(class_url));
 
-            with self.authenticated_session.session.get(
-                class_url,
-                params=_qparams,
-                stream=True
-            ) as resp:
+            resp = self.authenticated_session.session.get(class_url, params=_qparams);
             
-                total_count = resp.headers['X-Total-Count'] ;
+            """ for some classes this header value is missing, so assume 0 for them """
+            total_count = resp.headers.get('X-Total-Count', 0)
 
         except Exception as e:
             
             logging.exception("Error occured while getting ci list page")
             logging.warning("Error while fetching: {}".format(class_url))
 
-        return(min(self._test_ci_count, int(total_count)))
+        if(self._test_ci_count == 0):
+            return(int(total_count)) 
+        else:
+            return(self._test_ci_count)
+
         
 
 
@@ -528,51 +529,44 @@ class SnowCmdbApi:
         #return(resultset);
 
     
-    def get_ci_details(self, classname, ci_id_list, class_config):
+    def get_ci_details(self, classname, ci_id, class_config):
         
         ci_attribs = dict()
         req_ci_attribs = dict()
-        ci_details = list()
 
         _url =  self.get_cmdb_class_url(classname)
 
         try:
-            for ci_id in ci_id_list:
 
-                ci_url = "{}/{}".format(_url.strip('/'), ci_id)
-                resp = self.authenticated_session.session.get(ci_url)
+            ci_url = "{}/{}".format(_url.strip('/'), ci_id)
+            resp = self.authenticated_session.session.get(ci_url)
 
-                resp_json  = resp.json()
-                ci_attribs = resp_json['result']['attributes']
-                
-                # pick only required attributes for host var preparation. 
-                ci_parser = SnowCmdbCIGenericParser(ci_attribs)
+            resp_json  = resp.json()
+            ci_attribs = resp_json['result']['attributes']
+            
+            # pick only required attributes for host var preparation. 
+            ci_parser = SnowCmdbCIGenericParser(ci_attribs)
 
-                # primary identifier to address this CI from top level processes
-                # one of the ip_address, fqdn, host_name, name, etc.,
+            # primary identifier to address this CI from top level processes
+            # one of the ip_address, fqdn, host_name, name, etc.,
 
-                ci_name        = ci_parser.discover_ci_identifier(class_config['hostname_scan_order']);
+            ci_name        = ci_parser.discover_ci_identifier(class_config['hostname_scan_order']);
 
-                
-                if(not ci_parser.valid_hostname_or_ip(ci_name)):
-                
-                    continue;
-                
-                elif not ci_parser.is_active_ci():
-                     """ CI not yet installed or operational """
-                
-                     continue;
-                
-                #logging.debug("ci record valid, picking required fields")
-                req_ci_attribs = ci_parser.pickup_required_attributes(class_config['req_attribs'])
-                req_ci_attribs.update({'x_ci_identifier': ci_name})
-                
-                # add the ci record to the result list to return
-                ci_details.append(req_ci_attribs)
-
+            
+            if(not ci_parser.valid_hostname_or_ip(ci_name)):
+                return(req_ci_attribs)
+            
+            elif (not ci_parser.is_active_ci()):
+                """ CI not yet installed or operational """
+                return(req_ci_attribs)
+            
+            #logging.debug("ci record valid, picking required fields")
+            req_ci_attribs = ci_parser.pickup_required_attributes(class_config['req_attribs'])
+            req_ci_attribs.update({'x_ci_identifier': ci_name})
+            
         except Exception as e:
 
             logging.exception("Exception occured while getting ci_details")
 
-        return(ci_details)                
+        return(req_ci_attribs)
 
