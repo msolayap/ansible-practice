@@ -1,6 +1,7 @@
 
 from abc import ABC, abstractmethod, abstractproperty
 import pymysql
+from pprint  import pprint
 
 class Populate(ABC):
     """abstract class that defines the interface for various data populate methods.
@@ -34,17 +35,19 @@ class PopulateMysql(Populate):
         password - database password
         database - database to connect to
         """
-        self.host = host 
-        self.user = user
-        self.password = password
-        self.database = database
+
+        self.host = kwargs.get('host')
+        self.user = kwargs.get('user')
+        self.password = kwargs.get('password')
+        self.database = kwargs.get('database')
+
         try:
 
             self.connect_to_db();
         
         except Exception as e:
             
-            print(e)
+            print("Error while connecting to database\n", e)
 
         
     def add_host(self, hostname, groupname,  host_data):
@@ -58,32 +61,40 @@ class PopulateMysql(Populate):
         """
         try:
 
+            cursor = self.conn.cursor()
+
             tablename = "cmdb_ci_details"
 
             if(not self.conn.open):
                 print("DB connection closed")
+                return(False)
 
-            stmt = """INSERT INTO {} (sys_id, classname, x_ci_identifier, category, subcategory, classification, operational_status, install_status)    VALUES ( '%s', '%s', '%s', '%s', '%s', '%s', %d, %d ) """.format(tablename)
+            stmt = """INSERT INTO {} (sys_id, classname, x_ci_identifier, category, subcategory, classification, operational_status, install_status)    VALUES (%s, %s, %s, %s, %s, %s, %s, %s) """.format(tablename)
+
             stmt_args = (
                 host_data.get('sys_id'),
-                host_data.get('sys_class_name', ''),
+                host_data.get('sys_class_name', ""),
                 host_data.get('x_ci_identifier'),
                 host_data.get('category','generic_ci'),
-                host_data.get('subcategory',''),
+                host_data.get('subcategory',""),
                 host_data.get('classification','default'),
-                host_data.get('operational_status',0),
-                host_data.get('install_status',0)
+                int(host_data.get('operational_status',0)),
+                int(host_data.get('install_status',0))
+            
             )
-            
-            cursor = self.conn.cursor()
-            
-            cursor.execute(stmt, stmt_args)
+
+            #print("stmt: {} ".format(cursor.mogrify(stmt, args=stmt_args)))
+
+            cursor.execute(stmt, args=stmt_args)
 
             self.conn.commit();
              
         except Exception as e:
             
             print("Exception while adding host record", e)
+            return(False);
+
+        return(True)
         
 
     def connect_to_db(self):

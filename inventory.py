@@ -1,12 +1,12 @@
 import time
 import logging
 import atexit
-import pymysql 
 import sys 
 
 from pprint import pprint
 
 from snow_cmdb.oauthclient import CredentialsStoreVault, SnowApiAuth, SnowCmdbApi
+from snow_cmdb.populate import PopulateMysql
 
 ## main code
 
@@ -14,7 +14,21 @@ base_dir="/data01/home/ansible/ansible-practice/"
 vault_file          = base_dir + "/vault_lumen_snow"
 vault_password_file = base_dir + "/vault_password_file" ;
 cmdb_class_config = {
-    'cmdb_ci_unix_server': {
+    'cmdb_ci_win_server': {
+        'groupname' : 'servers',
+        'req_attribs' : [
+            'sys_id',
+            'sys_class_name',
+            'category',
+            'subcategory',
+            'operational_status',
+            'install_status',
+            'classification',
+            'os'
+        ],
+        'hostname_scan_order': ['ip_address','fqdn','name','host_name']
+    },
+    'cmdb_ci_linux_server': {
         'groupname' : 'servers',
         'req_attribs' : [
             'sys_id',
@@ -42,7 +56,12 @@ start = time.time();
 
 def end_tasks():
     end = time.time();
-    print("\nFinished in -> {:.2f} seconds".format(round((end - start), 2)));
+    exec_time = round((end - start), 2)
+    print("\nFinished in -> {:.2f} seconds".format(exec_time))
+    print ("{} CMDB Classes processed".format(cc))
+    print("{} CIs Processed\n{} CIs Added".format(pc, ac));
+    print("{} Cis processed per second".format(round(pc/exec_time,2)));
+
 
 atexit.register(end_tasks)
 
@@ -60,66 +79,53 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=lo
 #logger.addHandler(fh)
 ##########################
 
-dev_page_limit = 100
+dev_page_limit = 1000
 dev_total_count = 0
 
+
 credstore = CredentialsStoreVault(vault_file, vault_password_file);
+
 
 auth = SnowApiAuth( credstore.get_credentials() );
 
 auth.refresh_token();
 
-snow_api = SnowCmdbApi('lumen', auth, page_limit=dev_page_limit, test_ci_count=dev_total_count)
 
+snow_api = SnowCmdbApi('lumen', auth, page_limit=dev_page_limit, test_ci_count=dev_total_count)
 
 host_count = 0
 ci_details = [];
 results = []
 
-db_conn = pymysql.connect(host=db_config['host'],
+populate = PopulateMysql(host=db_config['host'],
         user=db_config['user'],
         password=db_config['password'],
         database=db_config['database']
         );
 
-if(db_conn.open):
-    print("Connected to database ... ")
-    print("deleting existing records...");
-    db_conn.cursor().execute("delete from cmdb_ci_details");
-    db_conn.commit()
-else:
-    print("Couldn't connect to database. exiting");
-    sys.exit(1);
-        
-inventory_table = 'cmdb_ci_details'
+pc=0
+ac=0
+pps=0
+cc=0
 
 for cmdb_class in cmdb_class_config:
+    cc += 1
 
     for ci_list in snow_api.get_class_ci_list(cmdb_class):
 
         for ci_id in ci_list:
+            pc += 1
 
             ci_detail = snow_api.get_ci_details(cmdb_class, ci_id, cmdb_class_config[cmdb_class])
 
             if( 'sys_id' in ci_detail ):
+                ac += 1
                 print("inserting ci %s" % (ci_detail['x_ci_identifier']))
+                hostname = ci_detail['x_ci_identifier'] 
 
-                stmt = """INSERT INTO %s (sys_id, classname, x_ci_identifier, category, subcategory, classification, operational_status, install_status ) values ( '%s', '%s', '%s', '%s', '%s', '%s', %d, %d )""" % (
-                    inventory_table,
-                    ci_detail['sys_id'],
-                    ci_detail['sys_class_name'],
-                    ci_detail['x_ci_identifier'],
-                    ci_detail['category'],
-                    ci_detail['subcategory'],
-                    ci_detail['classification'],
-                    int(ci_detail.get('operational_status',0)),
-                    int(ci_detail.get('install_status', 0))
-                    )
-                db_conn.cursor().execute(stmt)
+                populate.add_host(hostname, None, ci_detail)
 
 
-
-db_conn.commit()
 print("Commited all records");
 
                 

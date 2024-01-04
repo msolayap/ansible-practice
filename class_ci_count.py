@@ -32,8 +32,7 @@ with open("all_classes.txt", "r") as clist:
 logging.info("{} classes found".format(len(cmdb_class_list)))
 
 credstore = CredentialsStoreVault(vault_file, vault_password_file)
-cred = credstore.get_credentials()
-auth = SnowApiAuth(cred)
+auth = SnowApiAuth(credstore.get_credentials())
 auth.refresh_token()
 snow_api = SnowCmdbApi('lumen', auth, page_limit=10, test_ci_count=20)
 
