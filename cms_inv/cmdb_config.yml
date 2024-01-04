@@ -1,0 +1,17 @@
+---
+plugin: cmdb
+cache: True
+cache_connection: /usr/share/custom/inventory
+cache_plugin: jsonfile
+cache_timeout: 3600
+locations: []
+ca_cert_path:  /etc/pki/ca-trust/source/anchors/ca-bundle.pem
+skip_cert_validation: no
+cmdb_request_timeout: 300
+cms_url_auth: https://bssws-qa.it.savvis.net/bss-service-web/v2/oauth/token
+cms_username: ""
+cms_password: ""
+cms_vault_encrypted_file: /usr/share/ansible/vault/ro/cmdb_cms/vault.yml
+exclude_devices_with_cmdb_status: ["scrap"]
+iag_vault_password_file: /opt/automation-gateway/conf/.vault_password_file
+cms_number_of_threads: 4

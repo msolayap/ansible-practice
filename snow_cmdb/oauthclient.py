@@ -18,6 +18,7 @@ from ansible.module_utils._text import to_bytes
 # Oauth libraries
 from oauthlib.oauth2 import BackendApplicationClient
 from requests_oauthlib import OAuth2Session
+import urllib.parse
 
 
 class OAuthToken:
@@ -392,7 +393,203 @@ class SnowCmdbCIGenericParser(SnowCmdbCIParser):
         else:
             return(False)
 
+class SnowTableApi:
+    servicenow_domain = "service-now.com"
+    cmdb_instance_api_path = "/api/now/v2/table/"
+
+    def __init__(self, instance, auth_session, base_url=None, cmdb_api_path=None, scheme='https', page_limit=1000, test_ci_count=40):
+        self.instance = instance ;
+        self.authenticated_session = auth_session ;
+        
+        if not base_url:
+            self._base_url = f"{scheme}://{self.instance}.{self.servicenow_domain}"
+
+        if not cmdb_api_path:
+            self._cmdb_api_path = self.cmdb_instance_api_path
+
+        self._api_url = f"{self._base_url.strip('/')}/{self._cmdb_api_path.strip('/')}"
+        self._page_limit = page_limit
+        self._test_ci_count = test_ci_count ;
+        
+        _epochTime = str(int(time.time())) ;
+        
+        _x_digest = hmac.new(auth_session.credentials.api_secure_key.encode(), _epochTime.encode(), digestmod=hashlib.sha256).hexdigest();
+        
+        self._api_request_headers= {
+            'Authorization' : "%s %s" % (auth_session.token.token_type, auth_session.token.access_token),
+            'X-Digest' : _x_digest,
+            'X-Digest-Time' : _epochTime,
+            'X-Application-Key': auth_session.credentials.api_key,
+            'Accept' : 'application/json'
+        }
+        # directly set the headers in the session object instead of passing in get
+        self.authenticated_session.session.headers.update(self._api_request_headers) ;
+     
+
+    @property
+    def api_request_headers(self):
+        return(self._api_request_headers)
+    
+    @property
+    def api_url(self):
+        return(self._api_url);
+
+    def get_cmdb_class_url(self, cmdb_class):
+        return ( "{0}/{1}".format(self.api_url.strip('/'), cmdb_class.strip('/')) );
+ 
+        
+    def get_class_ci_total_count(self, class_url, offset=0, limit=1):
+        total_count = 0;
+    
+        _qparams = {
+            'sysparm_offset':  offset,
+            'sysparm_limit' :  limit
+        }
+        try:
+            
+            logging.debug("class url: {}".format(class_url));
+
+            resp = self.authenticated_session.session.get(class_url, params=_qparams);
+            
+            """ for some classes this header value is missing, so assume 0 for them """
+            total_count = resp.headers.get('X-Total-Count', 0)
+
+        except Exception as e:
+            
+            logging.exception("Error occured while getting ci list page")
+            logging.warning("Error while fetching: {}".format(class_url))
+
+        if(self._test_ci_count == 0):
+
+            return(int(total_count)) 
+
+        else:
+            return(self._test_ci_count)
+
+        
+    def get_urlencoded(self, fields_list=None):
+        """method to urlencode sysparm_fields """
+
+        if(not isinstance(fields_list, list)):
+
+            return( urllib.parse.quote(fields_list) )
+        else:
+            return( urllib.parse.quote(",".join(fields_list))  )
+
+    def get_ci_list_page(self, class_url, offset=0, limit=1000, qparams=None):
+        
+        result = []
+
+        _qparams = {
+            'sysparm_offset':  offset,
+            'sysparm_limit' :  limit
+        }
+
+        if(qparams != None):
+
+            _qparams.update(qparams)
+
+        try:
+
+            resp =  self.authenticated_session.session.get(
+                class_url,
+                params=_qparams
+            )
+            
+            resp_json = resp.json();
+            result = resp_json['result'] ;
+
+            return(result)
+
+
+        except Exception as e:
+            
+            logging.exception("Error occured while getting ci list page")
+            logging.warning("Error while fetching: {}".format(class_url))
+
+        return(result)
+
+        
+    
+    def get_ci_list(self, classname, page_limit=None, fields_list=tuple()):
+        
+        ci_list = [];
+        query_params = {}
+        offset = 0;
+
+        if ( page_limit is None):
+
+            if(self._page_limit > 0 ):
+
+                page_limit = self._page_limit
+
+            else:
+
+                page_limit = 4000; # hard limit if nothing is set.
+        
+        _url = self.get_cmdb_class_url(classname)
+        
+        class_ci_count = self.get_class_ci_total_count(_url)
+
+        logging.debug("pagination range object: start: {} stop: {} page_limit: {}".format(offset+1, class_ci_count, page_limit))
+
+        if(fields_list):
+
+            query_params.update({'sysparm_field' : self.get_urlencoded(fields_list) } )
+
+                
+        try:
+
+            for next_offset in range(offset+1, class_ci_count, int(page_limit)):
+
+                ci_list = self.get_ci_list_page(_url, next_offset, page_limit, query_params);
+
+                #resultset += ci_sysid_list
+                yield( ci_list )
+        
+        except Exception as e:
+        
+            logging.exception("Error occured while getting ci_list for class {}".format(classname))
+
+        return(ci_list);
+
+    
+    def filter_ci_record(self, ci_attribs, class_config):
+        
+        req_ci_attribs = dict()
+
+        try:
+
+            # pick only required attributes for host var preparation. 
+            ci_parser = SnowCmdbCIGenericParser(ci_attribs)
+
+            # primary identifier to address this CI from top level processes
+            # one of the ip_address, fqdn, host_name, name, etc.,
+
+            ci_name  = ci_parser.discover_ci_identifier(class_config['hostname_scan_order']);
+
+            
+            if(not ci_parser.valid_hostname_or_ip(ci_name)):
+                """ Not having valid hostname or fqdn or ip address. This CI is useless for inventory"""
+
+                return(req_ci_attribs)
+            
+            elif (not ci_parser.is_active_ci()):
+                """ CI not yet installed or operational """
+                return(req_ci_attribs)
+            
+            #logging.debug("ci record valid, picking required fields")
+            req_ci_attribs = ci_parser.pickup_required_attributes(class_config['req_attribs'])
+            req_ci_attribs.update({'x_ci_identifier': ci_name})
+            
+        except Exception as e:
+
+            logging.exception("Exception occured while getting ci_details")
+
+        return(req_ci_attribs)
+
 class SnowCmdbApi:
+
     servicenow_domain = "service-now.com"
     cmdb_instance_api_path = "/api/now/cmdb/instance/"
 
@@ -569,4 +766,3 @@ class SnowCmdbApi:
             logging.exception("Exception occured while getting ci_details")
 
         return(req_ci_attribs)
-
