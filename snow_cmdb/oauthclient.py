@@ -272,7 +272,6 @@ class CredentialsStoreVault:
         except Exception as e:
             logging.exception("Cannot Open vault_file %s", self._vault_file)
 
-#"https://lumen.service-now.com/api/now/cmdb/instance/u_cmdb_ci_other_server/6ecb870f1beb49101504edf1b24bcb81",
 
 class SnowCmdbCIParser(ABC):
 
@@ -317,7 +316,7 @@ class SnowCmdbCIParser(ABC):
         pass
 
     @abstractmethod
-    def discover_ci_identifier(self):
+    def get_ci_hostname(self):
         pass
 
     @abstractmethod
@@ -325,7 +324,7 @@ class SnowCmdbCIParser(ABC):
         pass
 
     @abstractmethod
-    def valid_hostname_or_ip(self, ci_name):
+    def is_valid_hostname(self, ci_name):
         pass
 
     @abstractmethod
@@ -342,7 +341,43 @@ class SnowCmdbCIGenericParser(SnowCmdbCIParser):
     def ci_details(self):
         return(self._ci_details)
     
-    def discover_ci_identifier(self, scan_order):
+    @ci_details.setter
+    def ci_details(self, cid):
+        self._ci_details = cid
+
+    def filter_ci_record(self, class_config):
+        
+        req_ci_attribs = dict()
+
+        try:
+
+            # primary identifier to address this CI from top level processes
+            # one of the ip_address, fqdn, host_name, name, etc.,
+
+            ci_name  = self.get_ci_hostname(class_config['hostname_scan_order']);
+
+            if(not self.is_valid_hostname(ci_name)):
+                """ Not having valid hostname or fqdn or ip address. This CI is useless for inventory"""
+
+                return(req_ci_attribs) # return empty dict
+            
+            elif (not self.is_active_ci()):
+                """ CI not yet installed or operational """
+
+                return(req_ci_attribs) # return empty dict
+            
+            #logging.debug("ci record valid, picking required fields")
+            req_ci_attribs = self.pickup_required_attributes(class_config['req_attribs'])
+            req_ci_attribs.update({'x_ci_identifier': ci_name})
+            
+        except Exception as e:
+
+            logging.exception("Exception occured while getting ci_details")
+
+        return(req_ci_attribs)
+
+    
+    def get_ci_hostname(self, scan_order):
         
         id_candidates = list()
         ci_identifier = None
@@ -359,15 +394,19 @@ class SnowCmdbCIGenericParser(SnowCmdbCIParser):
 
         return(ci_identifier)
 
-        
     def pickup_required_attributes(self, req_attribs=None):
         # pickup only required attributes
-        picked_attribs = {k:v for k,v in self.ci_details.items() if k in req_attribs}
+        picked_attribs = dict()
+        
+        if(req_attribs is not None):
+            picked_attribs = {k:v for k,v in self.ci_details.items() if k in req_attribs}
+
         return(picked_attribs);
 
     @classmethod
-    def valid_hostname_or_ip(cls, ci_name):
+    def is_valid_hostname(cls, ci_name):
         """
+        method to verify a valid hostname or ip. 
         if none of the scanned fields have valid name or
         if the name contains only numerical values e.g 1588383.9298
         skip this ci - not useful
@@ -395,7 +434,7 @@ class SnowCmdbCIGenericParser(SnowCmdbCIParser):
 
 class SnowTableApi:
     servicenow_domain = "service-now.com"
-    cmdb_instance_api_path = "/api/now/v2/table/"
+    table_api_path = "/api/now/v2/table/"
 
     def __init__(self, instance, auth_session, base_url=None, cmdb_api_path=None, scheme='https', page_limit=1000, test_ci_count=40):
         self.instance = instance ;
@@ -405,7 +444,7 @@ class SnowTableApi:
             self._base_url = f"{scheme}://{self.instance}.{self.servicenow_domain}"
 
         if not cmdb_api_path:
-            self._cmdb_api_path = self.cmdb_instance_api_path
+            self._cmdb_api_path = self.table_api_path
 
         self._api_url = f"{self._base_url.strip('/')}/{self._cmdb_api_path.strip('/')}"
         self._page_limit = page_limit
@@ -466,8 +505,8 @@ class SnowTableApi:
         else:
             return(self._test_ci_count)
 
-        
-    def get_urlencoded(self, fields_list=None):
+    @classmethod    
+    def get_urlencoded(cls, fields_list=None):
         """method to urlencode sysparm_fields """
 
         if(not isinstance(fields_list, list)):
@@ -525,7 +564,7 @@ class SnowTableApi:
 
             else:
 
-                page_limit = 4000; # hard limit if nothing is set.
+                page_limit = 1000; # hard limit if nothing is set.
         
         _url = self.get_cmdb_class_url(classname)
         
@@ -554,40 +593,7 @@ class SnowTableApi:
         return(ci_list);
 
     
-    def filter_ci_record(self, ci_attribs, class_config):
-        
-        req_ci_attribs = dict()
-
-        try:
-
-            # pick only required attributes for host var preparation. 
-            ci_parser = SnowCmdbCIGenericParser(ci_attribs)
-
-            # primary identifier to address this CI from top level processes
-            # one of the ip_address, fqdn, host_name, name, etc.,
-
-            ci_name  = ci_parser.discover_ci_identifier(class_config['hostname_scan_order']);
-
-            
-            if(not ci_parser.valid_hostname_or_ip(ci_name)):
-                """ Not having valid hostname or fqdn or ip address. This CI is useless for inventory"""
-
-                return(req_ci_attribs)
-            
-            elif (not ci_parser.is_active_ci()):
-                """ CI not yet installed or operational """
-                return(req_ci_attribs)
-            
-            #logging.debug("ci record valid, picking required fields")
-            req_ci_attribs = ci_parser.pickup_required_attributes(class_config['req_attribs'])
-            req_ci_attribs.update({'x_ci_identifier': ci_name})
-            
-        except Exception as e:
-
-            logging.exception("Exception occured while getting ci_details")
-
-        return(req_ci_attribs)
-
+    
 class SnowCmdbApi:
 
     servicenow_domain = "service-now.com"
@@ -750,7 +756,7 @@ class SnowCmdbApi:
             ci_name        = ci_parser.discover_ci_identifier(class_config['hostname_scan_order']);
 
             
-            if(not ci_parser.valid_hostname_or_ip(ci_name)):
+            if(not ci_parser.is_valid_hostname(ci_name)):
                 return(req_ci_attribs)
             
             elif (not ci_parser.is_active_ci()):
