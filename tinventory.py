@@ -5,7 +5,7 @@ import sys
 
 from pprint import pprint
 
-from snow_cmdb.oauthclient import CredentialsStoreVault, SnowApiAuth, SnowTableApi
+from snow_cmdb.oauthclient import CredentialsStoreVault, SnowApiAuth, SnowTableApi, SnowCmdbCIGenericParser
 from snow_cmdb.populate import PopulateMysql
 
 ## main code
@@ -64,15 +64,14 @@ def end_tasks():
     print("{} CIs Processed\n{} CIs Added".format(pc, ac), file=sys.stderr);
     print("{} Cis processed per second".format(round(pc/exec_time,2)), file=sys.stderr);
 
-
 atexit.register(end_tasks)
 
 #### logger ###
 
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.WARNING, datefmt='%Y-%m-%d-%H:%M:%S');
+#logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.WARNING, datefmt='%Y-%m-%d-%H:%M:%S');
 
 #logger = logging.getlogger("__name__")
-#
+
 #logger.setLevel(logging.DEBUG)
 #fh = logging.StreamHandler();
 #fh.setLevel(logging.DEBUG)
@@ -80,7 +79,7 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=lo
 #fh.setFormatter(formatter);
 #logger.addHandler(fh)
 
-dev_page_limit = 3000
+dev_page_limit = 1000
 dev_total_count = 0
 
 
@@ -108,6 +107,8 @@ ac=0
 pps=0
 cc=0
 
+ci_parser = SnowCmdbCIGenericParser();
+
 for cmdb_class in cmdb_class_config:
     cc += 1
 
@@ -116,7 +117,8 @@ for cmdb_class in cmdb_class_config:
         for ci_data in ci_list:
             pc += 1
 
-            ci_detail = snow_api.filter_ci_record(ci_data, cmdb_class_config[cmdb_class])
+            ci_parser.ci_details = ci_data
+            ci_detail = ci_parser.filter_ci_record(cmdb_class_config[cmdb_class])
 
             if( ci_detail ):
                 ac += 1

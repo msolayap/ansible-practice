@@ -821,3 +821,4 @@ class SnowCmdbApi:
             logging.exception("Exception occured while getting ci_details")
 
         return(req_ci_attribs)
+
