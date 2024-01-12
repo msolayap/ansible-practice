@@ -37,7 +37,7 @@ snow_cmdb_classes:
     ansible_hostname_attrib: ip_address
     valid_hostname_only: True
   cmdb_ci_backup_server:
-    sync_enabled: false
+    sync_enabled: true
     groupname: backup_servers
     req_attribs:
        - sys_id
@@ -58,7 +58,7 @@ snow_cmdb_classes:
     ansible_hostname_attrib: ""
     valid_hostname_only: True
   cmdb_ci_win_server:
-    sync_enabled: false
+    sync_enabled: true
     groupname: windows_servers
     req_attribs:
        - sys_id
@@ -79,7 +79,7 @@ snow_cmdb_classes:
     ansible_hostname_attrib: "ip_address"
     valid_hostname_only: True
   cmdb_ci_linux_server:
-    sync_enabled: false
+    sync_enabled: true
     groupname: linux_servers
     req_attribs:
        - sys_id
@@ -100,7 +100,7 @@ snow_cmdb_classes:
     ansible_hostname_attrib: "ip_address"
     valid_hostname_only: True
   cmdb_ci_esx_server:
-    sync_enabled: false
+    sync_enabled: true
     groupname: esx_servers
     req_attribs:
        - sys_id
@@ -121,7 +121,7 @@ snow_cmdb_classes:
     ansible_hostname_attrib: "ip_address"
     valid_hostname_only: True
   cmdb_ci_ip_switch:
-    sync_enabled: false
+    sync_enabled: true
     groupname: ip_switches
     req_attribs:
        - sys_id
@@ -142,7 +142,7 @@ snow_cmdb_classes:
     ansible_hostname_attrib: "ip_address"
     valid_hostname_only: True
   cmdb_ci_ip_router:
-    sync_enabled: false
+    sync_enabled: true
     groupname: ip_routers
     req_attribs:
        - sys_id
