@@ -16,6 +16,7 @@ snow_page_limit: 1500
 snow_concurrent_max_workers: 4
 snow_cmdb_classes:
   cmdb_ci_unix_server:
+    sync_enabled: true
     groupname: unix_servers
     req_attribs:
        - sys_id
@@ -34,4 +35,130 @@ snow_cmdb_classes:
        - hostname
        - ip_address
     ansible_hostname_attrib: ip_address
+    valid_hostname_only: True
+  cmdb_ci_backup_server:
+    sync_enabled: false
+    groupname: backup_servers
+    req_attribs:
+       - sys_id
+       - sys_class_name
+       - category
+       - subcategory
+       - name
+       - operational_status
+       - install_status
+       - classification
+       - ip_address
+    hostname_scan_order:
+       - fqdn
+       - name
+       - host_name
+       - hostname
+       - ip_address
+    ansible_hostname_attrib: ""
+    valid_hostname_only: True
+  cmdb_ci_win_server:
+    sync_enabled: false
+    groupname: windows_servers
+    req_attribs:
+       - sys_id
+       - sys_class_name
+       - category
+       - subcategory
+       - name
+       - operational_status
+       - install_status
+       - classification
+       - ip_address
+    hostname_scan_order:
+       - fqdn
+       - name
+       - host_name
+       - hostname
+       - ip_address
+    ansible_hostname_attrib: "ip_address"
+    valid_hostname_only: True
+  cmdb_ci_linux_server:
+    sync_enabled: false
+    groupname: linux_servers
+    req_attribs:
+       - sys_id
+       - sys_class_name
+       - category
+       - subcategory
+       - name
+       - operational_status
+       - install_status
+       - classification
+       - ip_address
+    hostname_scan_order:
+       - fqdn
+       - name
+       - host_name
+       - hostname
+       - ip_address
+    ansible_hostname_attrib: "ip_address"
+    valid_hostname_only: True
+  cmdb_ci_esx_server:
+    sync_enabled: false
+    groupname: esx_servers
+    req_attribs:
+       - sys_id
+       - sys_class_name
+       - category
+       - subcategory
+       - name
+       - operational_status
+       - install_status
+       - classification
+       - ip_address
+    hostname_scan_order:
+       - fqdn
+       - name
+       - host_name
+       - hostname
+       - ip_address
+    ansible_hostname_attrib: "ip_address"
+    valid_hostname_only: True
+  cmdb_ci_ip_switch:
+    sync_enabled: false
+    groupname: ip_switches
+    req_attribs:
+       - sys_id
+       - sys_class_name
+       - category
+       - subcategory
+       - name
+       - operational_status
+       - install_status
+       - classification
+       - ip_address
+    hostname_scan_order:
+       - fqdn
+       - name
+       - host_name
+       - hostname
+       - ip_address
+    ansible_hostname_attrib: "ip_address"
+    valid_hostname_only: True
+  cmdb_ci_ip_router:
+    sync_enabled: false
+    groupname: ip_routers
+    req_attribs:
+       - sys_id
+       - sys_class_name
+       - category
+       - subcategory
+       - name
+       - operational_status
+       - install_status
+       - classification
+       - ip_address
+    hostname_scan_order:
+       - fqdn
+       - name
+       - host_name
+       - hostname
+       - ip_address
+    ansible_hostname_attrib: "ip_address"
     valid_hostname_only: True

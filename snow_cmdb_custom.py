@@ -237,6 +237,12 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
             
             for cmdb_class  in snow_cmdb_classes:
                 
+                class_sync_enabled = snow_cmdb_classes[cmdb_class].get("sync_enabled", False)
+
+                if(not class_sync_enabled):
+                    """ skip inventory sync for this class if not enabled"""
+                    continue;
+                
                 """ add the group mentioned for the class to the inventory"""
                 class_group_name = snow_cmdb_classes[cmdb_class].get("groupname","all");
                 _groups[class_group_name] = [] 
