@@ -5,6 +5,8 @@ from __future__ import absolute_import, division, print_function
 import os
 import traceback
 import re
+import time
+
 from pprint import pprint
 
 from snow_client.snow_cmdb import  OAuthCredentials, SnowApiAuth, SnowTableApi, SnowCmdbCIGenericParser
@@ -58,6 +60,8 @@ from ansible.module_utils._text import to_bytes, to_native, to_text
 from ansible.plugins.inventory import BaseInventoryPlugin, Cacheable, Constructable
 
 
+
+
 class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
 
     NAME = "snow_cmdb_custom"
@@ -102,6 +106,8 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
         cache_enabled = self.get_option("cache")
         hosts = [] ;
         groups = [];
+
+ 
 
         inventory_data = None
         if not cache_enabled:
@@ -189,6 +195,7 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
                     raise
 
         self.populate(hosts, groups)
+        
 
    
     # This method can be removed once we migrate to CMS
@@ -202,6 +209,9 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
             AnsibleError: Description
             AnsibleParserError: Description
         """
+        stime = time.time();
+        
+        
         encrypted_vault_file = self.get_option("snow_vault_encrypted_oauth_credentials")
         vault_password_file = self.get_option("iag_vault_password_file")
 
@@ -209,7 +219,16 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
         snow_page_limit = self.get_option("snow_page_limit")
         snow_cmdb_classes = self.get_option("snow_cmdb_classes")
 
-        
+        inv_sync_stats = {
+            "invalid_cis"   :    0,
+            "duplicate_cis" :    0,
+            "processed_cis" :    0,
+            "without_hostnames": 0,
+            "host_added":        0,
+            "group_added":       0,
+            "sync_time": 0  
+        }
+
 
         """ return datatype structure"""
         _hosts = {}; # dict with key: hostname val: another dict with hostvar:hostval
@@ -222,6 +241,7 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
                 "ansible_host": "localhost",
         }
                 
+        _groups[default_ansible_group] = []
         _groups[default_ansible_group].append(_localhost)
             
         container_py_interpreter  = "/opt/app-root/bin/python" ;
@@ -251,12 +271,17 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
                     continue;
                 
                 """ add the group mentioned for the class to the inventory"""
-                class_group_name = snow_cmdb_classes[cmdb_class].get("groupname","all");
-                _groups[class_group_name] = [] 
+                class_group_name = snow_cmdb_classes[cmdb_class].get("groupname", cmdb_class);
+
+                if class_group_name not in _groups.keys():
+                    inv_sync_stats["group_added"] += 1
+                    _groups[class_group_name] = [] 
+
 
                 for ci_list in snow_api.get_ci_list(cmdb_class):
                     
                     for ci_data in ci_list:
+                        inv_sync_stats["processed_cis"] += 1
                         
                         """load current CI record in parser"""
                         ci_parser.ci_details = ci_data
@@ -264,55 +289,59 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
                         # process the records. set hostname, ip address, etc,
                         ci_detail = ci_parser.process_ci_record(snow_cmdb_classes[cmdb_class])
 
-                        if ( ci_detail ):
+                        if ( not ci_detail ):
+                            """probably invalid ci the parser failed it."""
+                            inv_sync_stats["invalid_cis"] += 1
+                            continue
                             
-                            self.display.verbose(msg=to_text("inserting ci %s" % (ci_detail['x_ci_identifier'])) )
+                        
+                        
+                        _hostname = ci_detail.get('x_ci_identifier',None)
+
+                        if ( _hostname == None ):
+                            """without hostname a CI is not really useful"""
+                            inv_sync_stats["without_hostnames"] += 1
+                            continue
+                        
+                        #self.display.verbose(msg=to_text("Adding ci %s" % (ci_detail['x_ci_identifier'])) )
+
+                        # if the user/config not preferred any attrib for ansible_hostname,
+                        # lets set our x_ci_identifier as one.
+                        
+                        if("ansible_hostname" not in ci_detail):
+                            ci_detail["ansible_hostname"] = _hostname
+                        
+                        # remove our meta key for hostname    
+                        ci_detail.pop("x_ci_identifier")
+
+
+                        #  to align with cache handling, we will defer adding of hosts/groups to later time
+                        #  add ci to its class group
+                        
+                        _groups[class_group_name].append(_hostname)
+
+                        _safe_hostname = str(_hostname)
+
+                        self.display.debug(msg=to_text("Inserting record: {}".format(_safe_hostname)) );
+                                                        
+                        
+                        if (_hosts.setdefault(_safe_hostname, None) == None):
+                        
+                            """ host does not already exist """
+                            _hosts[_safe_hostname] = {}
+                            inv_sync_stats["host_added"] +=1
+                        
+                        else:
+                        
+                           """ host exists. duplicate CI. skip and continue to next CI """
+                           self.display.warning(msg=to_text("Duplicate CI encountered %s" % (_safe_hostname)))
+                           inv_sync_stats["duplicate_cis"] += 1
+                           continue
+                        # prepare hostvars out of CI attributes.   
+                        for variable, value in ci_detail.items():
                             
-                            _hostname = ci_detail.get('x_ci_identifier',None)
-
-                            if ( _hostname == None ):
-                                continue
-
-                            # if the user/config not preferred any attrib for ansible_hostname,
-                            # lets set our x_ci_identifier as one.
+                            _hosts[_safe_hostname].setdefault(variable, value)
                             
-                            if("ansible_hostname" not in ci_detail):
-                                ci_detail["ansible_hostname"] = _hostname
-                            
-                            # remove our meta key for hostname    
-                            ci_detail.pop("x_ci_identifier")
-
-
-                            #  to align with cache handling, we will defer adding of hosts/groups to later time
-                            #  add ci to its class group
-                            
-                            _groups[class_group_name].append(_hostname)
-
-                            _safe_hostname = str(_hostname)
-
-                            self.display.debug(msg=to_text("Inserting record: {}".format(_safe_hostname)) );
-                                                            
-                            if (_safe_hostname not in _hosts.keys()):
-                                    
-                                _hosts[_safe_hostname] = {}
-                                
-                            else:
-                                """ duplicate variable for record """
-                                self.display.warning(msg=to_text("Duplicate CI encountered %s" % (_safe_hostname)))
-                                continue
-                            
-                            for variable, value in ci_detail.items():
-                                
-                                #self.inventory.set_variable(_hostname, variable, value)
-                                
-                                if (variable not in _hosts[_safe_hostname].keys()):
-                                    
-                                    _hosts[_safe_hostname][variable] = value
-                                
-                                else:
-                                    """ duplicate variable for record """
-                                    self.display.warning(msg=to_text("Duplicate variable %s" % (variable)))
-                                    continue
 
         except Exception as e:
             self.display.error(to_text(traceback.format_exc()))
@@ -321,7 +350,18 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
                     e=to_native(e)
                 )
             )
-        
+        etime = time.time()
+        inv_sync_stats["sync_time"] = round(etime - stime, 2);
+        self.display.verbose(msg=to_text("""
+Processed CIs     : {processed_cis}
+Invalid CIs       : {invalid_cis}
+Duplicate CIs     : {duplicate_cis}
+CIs w/o hostnames : {without_hostnames}
+Hosts added       : {host_added}
+Groups added      : {group_added}
+Sync time         : {sync_time} seconds        
+
+        """.format(**inv_sync_stats)))
         return ( (_hosts, _groups) )
 
 
