@@ -62,22 +62,22 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
 
     NAME = "snow_cmdb_custom"
 
-    def verify_file(self, path):
+    def verify_file(self, path) -> bool:
         """Return true/false if this is possibly a valid file for this plugin
         to consume.
 
         Args:
-            path (TYPE): Description
+            path (TYPE): Config file path for this plugin. 
 
         Returns:
-            TYPE: Description
+            TYPE: valdity of this plugin.
         """
         valid = False
         if super(InventoryModule, self).verify_file(path):
             # base class verifies that file exists and is readable by current
             # user
-            #if os.path.basename(path) == "snow_cmdb_custom.yml":
-            #    valid = True
+            if os.path.basename(path) == "snow_cmdb_custom.yml":
+                valid = True
             pass
         return(True)
 
@@ -229,15 +229,17 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
             
             auth.refresh_token();
             snow_api = SnowTableApi(snow_instance, auth, page_limit=snow_page_limit)
-            ci_parser = SnowCmdbCIGenericParser();
+            snow_api.set_api_auth_headers();
 
+            # Initialize only one Parser Object. We just update the attribute of the same object
+            # and utilize its methods for every CI.
+            ci_parser = SnowCmdbCIGenericParser();
             
             for cmdb_class  in snow_cmdb_classes:
                 
                 """ add the group mentioned for the class to the inventory"""
                 class_group_name = snow_cmdb_classes[cmdb_class].get("groupname","all");
                 _groups[class_group_name] = [] 
-                #self.inventory.add_group(class_group_name)
 
                 for ci_list in snow_api.get_ci_list(cmdb_class):
                     
@@ -245,6 +247,7 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
                         
                         """load current CI record in parser"""
                         ci_parser.ci_details = ci_data
+
                         # process the records. set hostname, ip address, etc,
                         ci_detail = ci_parser.process_ci_record(snow_cmdb_classes[cmdb_class])
 
@@ -266,11 +269,10 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
                             # remove our meta key for hostname    
                             ci_detail.pop("x_ci_identifier")
 
+
+                            #  to align with cache handling, we will defer adding of hosts/groups to later time
+                            #  add ci to its class group
                             
-                            
-                            # """ to align with cache handling, we will defer adding of hosts/groups to later time"""
-                            # """ add ci to its class group"""
-                            # self.inventory.add_host(host=_hostname, group=class_group_name)
                             _groups[class_group_name].append(_hostname)
 
                             _safe_hostname = str(_hostname)
@@ -301,7 +303,7 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
 
         except Exception as e:
             self.display.error(to_text(traceback.format_exc()))
-            raise AnsibleError(
+            raise AnsibleParserError(
                 "Error while fetching inventory from snow. Exception {e}".format(
                     e=to_native(e)
                 )

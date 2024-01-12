@@ -1,4 +1,9 @@
 ---
+# Yaml plugin configuration file for Ansible Inventory from ServiceNow system.
+# This is custom developed snow inventory plugin  for Lumen instance of ServiceNow.
+# Lumen instance of SNOW works by client_credentials grant_type of OAuth.
+# it also needs to pass through Apigee system with some custom headers.
+# 
 plugin: snow_cmdb_custom
 cache: True
 cache_connection: /tmp/inventory

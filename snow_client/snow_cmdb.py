@@ -58,6 +58,14 @@ class OAuthToken:
                  token_expires_in:int=0, 
                  token_fetched_time=datetime.now(),
                  token_type:str="Bearer", **kwargs):
+        """_summary_
+
+        Args:
+            token (str): access token string
+            token_expires_in (int, optional): seconds the token expires in - as returned by OAuth provider. Defaults to 0.
+            token_fetched_time (_type_, optional): token fetched time in datetime type. This is to calculate token expiration. Defaults to datetime.now().
+            token_type (str, optional): Token type string as received from Auth provider. Defaults to "Bearer".
+        """
         
         self._access_token = token ;
         self._token_expires_in = token_expires_in
@@ -76,6 +84,8 @@ class OAuthToken:
 
     @property
     def access_token(self):
+        """method to get access_token from the token object
+        """
         return(self._access_token)
         
     @property
@@ -92,16 +102,23 @@ class OAuthToken:
 
     
     def update_token(self, token_dict):
+        """utility method to update the token information stored in this object
+
+        Typically used when next fresh token is fetched during program execution.
+
+        Args:
+            token_dict (_type_): token dict as received from OAuth provider.
+        """
         self._access_token = token_dict['access_token'] ;
         self._token_expires_in = token_dict['expires_in']
         self._token_type = token_dict['token_type']
         self._token_fetched_time = token_dict.get('fetched_time', datetime.now())
         self._expiry_timestamp = self.calc_expiry_timestamp(self._token_fetched_time, int(self._token_expires_in));
     
-    def is_expired(self, by_time=datetime.now()):
+    def is_expired(self, by_time=datetime.now()) -> bool:
         """Method to verify the token's validity. i.e if its expired or valid. 
         
-        Parameters:
+        Args:
             by_time: int
                 a timestamp to compare the token's expiry time against. 
                 by default this is current time.
@@ -122,7 +139,7 @@ class OAuthToken:
             return(False);
                 
 class OAuthCredentials:
-    """Object to represet credentials as a whole"""
+    """Object to hold and represet OAuth credentials as a whole"""
 
     def __init__(self, 
                  client_id=None, 
@@ -148,6 +165,13 @@ class OAuthCredentials:
             
             
     def from_json(self, json_data):
+        """method to consume token details from json instead of individual parameters
+
+        The incoming json is expected to have all fields required to update Credential object
+
+        Args:
+            json_data (_type_): json string as received from OAuth get/refresh token call.
+        """        
 
         try:
             cred_dict = json.loads(json_data);
@@ -160,7 +184,6 @@ class OAuthCredentials:
         
         except Exception as e:
             logging.exception("Error while loading credentials from json string")
-
 
     @property
     def client_id(self):
@@ -207,8 +230,11 @@ class SnowApiAuth:
         return(self._credentials);
 
 
-    def refresh_token(self):
-        
+    def refresh_token(self) -> bool:
+        """method to fetch new token from token endpoint. 
+
+        Typically used to get new token in case the current token expired.
+        """        
         try:
             
             token_response = self.session.fetch_token(
@@ -238,35 +264,61 @@ class SnowApiAuth:
             return(False)
 
 class SnowCmdbCIParser(ABC):
+    """Abstract class for CI parser. 
+    
+    directs essential methods to be implemented for processing.
+    implements utility methods for all sub classes.
+    """    
 
     true_expression = re.compile(r'^(true|yes)$', re.IGNORECASE)
     false_expression = re.compile(r'^(false|no)$', re.IGNORECASE)
 
     @classmethod
     def is_true(cls, val):
-        if isinstance( val , str ):
-            if(0 < int(val) ):
-                """for values like 6, 7, 8 instead of 1"""
-                return(True)
-            elif( cls.true_expression.match( val ) ):
-                """ true or yes"""
-                return(True)
-            else:
-                return(False)
-            
+        """class method to check Truth value of given parameter.
+    
+        Primarily to scan for true, yes, 0, 8, 9, etc.,
+
+        Args:
+            val (_type_): Parameter to check against
+        """        
+        try:
+            if isinstance( val , str ):
+                if(0 < int(val) ):
+                    """for values like 6, 7, 8 instead of 1"""
+                    return(True)
+                elif( cls.true_expression.match( val ) ):
+                    """ true or yes"""
+                    return(True)
+                else:
+                    return(False)
+        except Exception as e:
+            logging.warning("Error: in method is_true: cannot verify true value. Exception {}".format(e))
+        
         return( bool(val) )
     
     @classmethod
     def is_false(cls, val):
-        if isinstance( val , str ):
-            if(1 > int(val)):
-                """ for values like 0 or lesser"""
-                return(True)
-            if( cls.false_expression.match( val ) ):
-                """ false or no"""
-                return(True)
-            else:
-                return(False);
+        """class method to check False value of given parameter.
+    
+        Primarily to scan for false, no, 0, etc.,
+
+        Args:
+            val (_type_): Parameter to check against
+        """ 
+        try:
+
+            if isinstance( val , str ):
+                if(1 > int(val)):
+                    """ for values like 0 or lesser"""
+                    return(True)
+                if( cls.false_expression.match( val ) ):
+                    """ false or no"""
+                    return(True)
+                else:
+                    return(False);
+        except Exception as e:
+            logging.warning("Error: in method is_false: cannot verify true value. Exception {}".format(e))
     
         return( not bool(val) )
 
@@ -297,6 +349,39 @@ class SnowCmdbCIParser(ABC):
         
 
 class SnowCmdbCIGenericParser(SnowCmdbCIParser):
+    """Concrete implementation of CI Parser class.
+
+    Implements:
+        SnowCmdbCIParser
+
+    Attributes:
+        ci_details (dict): A dict with various attributes and values of a SNOW CI
+
+    Methods:
+        process_ci_record:
+            process the ci_details and cleanse it for further consumption.
+            if the CI is missing key attributes, then returns empty dict.
+        
+        is_fqdn:
+            verify given string is valid FQDN as per RFC.
+
+        is_active_ci:
+            utility method that checks various attributes pertaining to active state of a CI
+        
+        get_ci_hostname:
+            A CI can carry hostname in various attributes like name, fqdn, hostname, etc.,
+            This method will pickup from the first non-empty attribute
+        
+        get_ci_attrib:
+            wrapper method to directly access the ci_details dict key. returns value of given attribute.
+
+        is_valid_hostname:
+            similar to FQDN check, verifies if the given string is valid hostname or ip.
+
+        pickup_required_attributes:
+            a filter function for the dict. filters and provides only given keys and their values.
+        
+    """    
     def __init__(self, ci_details:dict=None):
         self.ci_details = ci_details
     
@@ -314,9 +399,9 @@ class SnowCmdbCIGenericParser(SnowCmdbCIParser):
 
         try:
 
-            print(" ------------ class config received in process record ----------")
-            pprint(class_config)
-            print(" ---------------------------------------------------------------")
+            #print(" ------------ class config received in process record ----------")
+            #pprint(class_config)
+            #print(" ---------------------------------------------------------------")
 
             # primary identifier to address this CI from top level processes
             # one of the ip_address, fqdn, host_name, name, etc.,
@@ -439,8 +524,12 @@ class SnowCmdbCIGenericParser(SnowCmdbCIParser):
             return(True)
     
     # method to verify validity of the CI record for sync
-    def is_active_ci(self):
-        
+    def is_active_ci(self) -> bool:
+        """method to verify various attributes of a CI to check its active state.
+
+        Returns:
+            bool: active state of the CI
+        """
         if ( self.ci_details['hardware_status'] == "installed" and
              self.is_true(self.ci_details.get('install_status', False)) and 
              self.is_true(self.ci_details.get('operational_status', False))
@@ -453,6 +542,9 @@ class SnowCmdbCIGenericParser(SnowCmdbCIParser):
             return(False)
 
 class SnowTableApi:
+    """class to access SNOW API through its Table API
+
+    """
     servicenow_domain = "service-now.com"
     table_api_path = "/api/now/v2/table/"
 
@@ -469,16 +561,23 @@ class SnowTableApi:
         self._api_url = f"{self._base_url.strip('/')}/{self._cmdb_api_path.strip('/')}"
         self._page_limit = page_limit
         self._test_ci_count = test_ci_count ;
-        
+        self._api_request_headers = {}
+
+    def set_api_auth_headers(self):
+        """method to set custom API auth HTTP headers for snow API system.
+
+        The internal SNOW system mandates certain custom headers to pass through Apigee server.
+        """
+
         _epochTime = str(int(time.time())) ;
         
-        _x_digest = hmac.new(auth_session.credentials.api_secure_key.encode(), _epochTime.encode(), digestmod=hashlib.sha256).hexdigest();
+        _x_digest = hmac.new(self.authenticated_session.credentials.api_secure_key.encode(), _epochTime.encode(), digestmod=hashlib.sha256).hexdigest();
         
         self._api_request_headers= {
-            'Authorization' : "%s %s" % (auth_session.token.token_type, auth_session.token.access_token),
+            'Authorization' : "%s %s" % (self.authenticated_session.token.token_type, self.authenticated_session.token.access_token),
             'X-Digest' : _x_digest,
             'X-Digest-Time' : _epochTime,
-            'X-Application-Key': auth_session.credentials.api_key,
+            'X-Application-Key': self.authenticated_session.credentials.api_key,
             'Accept' : 'application/json'
         }
         # directly set the headers in the session object instead of passing in get
@@ -494,16 +593,38 @@ class SnowTableApi:
         return(self._api_url);
 
     def get_cmdb_class_url(self, cmdb_class):
+        """appends CMDB CI class string to the URL and returns it
+
+        Args:
+            cmdb_class (_type_): SNOW CMDB Class string
+
+        Returns:
+            _type_: url string with cmdb class embedded.
+        """
         return ( "{0}/{1}".format(self.api_url.strip('/'), cmdb_class.strip('/')) );
  
         
-    def get_class_ci_total_count(self, class_url, offset=0, limit=1):
+    def get_class_ci_total_count(self, class_url):
+        """method to get total CI records in the given CMDB class
+
+        This is required to set pagination variables in further API calls
+        so to consume all the records.
+
+        Args:
+            class_url (_type_): API full url for the CMDB class
+        
+        Returns:
+            count: integer of total number of records available in the CMDB class. This
+            is fetched from the X-Total-Count header in the API response.
+
+        """
         total_count = 0;
     
         _qparams = {
-            'sysparm_offset':  offset,
-            'sysparm_limit' :  limit
+            'sysparm_offset':  0,
+            'sysparm_limit' :  1
         }
+        
         try:
             
             logging.debug("class url: {}".format(class_url));
@@ -536,14 +657,24 @@ class SnowTableApi:
             return( urllib.parse.quote(",".join(fields_list))  )
 
     def get_ci_list_page(self, class_url, offset=0, limit=1000, qparams=None):
+        """method to return CI records of a particular page (offset+limit) of the several page API response.
+
+        Args:
+            class_url (_type_): full API url for the CMDB Class
+            offset (int, optional): _description_. Defaults to 0.
+            limit (int, optional): _description_. Defaults to 1000.
+            qparams (_type_, optional): _description_. Defaults to None.
+        """
         
         result = []
 
+        # set the pagination variables
         _qparams = {
             'sysparm_offset':  offset,
             'sysparm_limit' :  limit
         }
 
+        # update the user provided qparams if any.
         if(qparams != None):
 
             _qparams.update(qparams)
@@ -563,7 +694,7 @@ class SnowTableApi:
 
         except Exception as e:
             
-            logging.exception("Error occured while getting ci list page")
+            logging.exception("Error occured while getting ci list page: {}".format(e))
             logging.warning("Error while fetching: {}".format(class_url))
 
         return(result)
@@ -571,6 +702,20 @@ class SnowTableApi:
         
     
     def get_ci_list(self, classname, page_limit=None, fields_list=tuple()):
+        """Get all the CIs for the given CMDB Class.
+
+        This method identifies the total pages in the API response.
+        iteratively fetches all the pages and CIs within it, with one difference.
+        yields CIs of a page to the caller and then go to fetch next page.
+        
+        Args:
+            classname (_type_): _description_
+            page_limit (_type_, optional): overriden value for page_limit set in Class intiation. Defaults to None.
+            fields_list (_type_, optional): Interested attributes of a CI to pick. Defaults to tuple().
+
+        Yields:
+            ci list of single page.
+        """
         
         ci_list = [];
         query_params = {}
@@ -610,10 +755,13 @@ class SnowTableApi:
             logging.exception("Error occured while getting ci_list for class {}".format(classname))
 
         return(ci_list);
-
-    
-    
+   
 class SnowCmdbApi:
+    """Class that implements accessing SNOW CI through CMDB Instance API
+
+    This is a valid and active class to consume CI, however not effecient
+    for bulk consumption of several thousand CIs. use SnowTableApi instead.
+    """
 
     servicenow_domain = "service-now.com"
     cmdb_instance_api_path = "/api/now/cmdb/instance/"

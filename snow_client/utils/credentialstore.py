@@ -5,8 +5,25 @@ from ansible.parsing import vault
 from ansible.parsing.vault import VaultSecret
 from ansible.module_utils._text import to_bytes
 
+from abc import ABC, abstractmethod
 
-class CredentialsStoreVault:
+class CredentialsStore(ABC):
+    """abstract class for Credentials Storage/retrieval"""
+
+    
+    def __init__(self):
+        pass
+    
+    @abstractmethod
+    def get_credentials(self):
+        pass
+
+class CredentialsStoreVault(CredentialsStore):
+    """Class to provide methods to read credentials stored in ansible_vault format.
+    
+    This is concrete implementation of CredentialsStore class
+    The idea is to provide many implementations of CredentialsStore
+    """
 
     def __init__(self, vault_file, vault_key_file):
 
