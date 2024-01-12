@@ -7,8 +7,8 @@ import traceback
 import re
 from pprint import pprint
 
-from snow_cmdb.snowclient import  OAuthCredentials, SnowApiAuth, SnowTableApi, SnowCmdbCIGenericParser
-from snow_cmdb.utils.credentialstore import CredentialsStoreVault
+from snow_client.snow_cmdb import  OAuthCredentials, SnowApiAuth, SnowTableApi, SnowCmdbCIGenericParser
+from snow_client.utils.credentialstore import CredentialsStoreVault
 
 __metaclass__ = type
 
