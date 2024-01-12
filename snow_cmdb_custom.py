@@ -293,8 +293,6 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
                             """probably invalid ci the parser failed it."""
                             inv_sync_stats["invalid_cis"] += 1
                             continue
-                            
-                        
                         
                         _hostname = ci_detail.get('x_ci_identifier',None)
 
@@ -362,6 +360,7 @@ Groups added      : {group_added}
 Sync time         : {sync_time} seconds        
 
         """.format(**inv_sync_stats)))
+        
         return ( (_hosts, _groups) )
 
 
