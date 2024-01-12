@@ -209,13 +209,20 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
         snow_page_limit = self.get_option("snow_page_limit")
         snow_cmdb_classes = self.get_option("snow_cmdb_classes")
 
+        
+
         """ return datatype structure"""
-        _hosts = {}; # dict with key: hostname, val: another dict with hostvar:hostval
-        _hosts["localhost"] = {
+        _hosts = {}; # dict with key: hostname val: another dict with hostvar:hostval
+        _groups = {}
+        default_ansible_group = "all"
+
+        _localhost = "localhost"
+        _hosts[_localhost] = {
                 "ansible_connection": "local",
                 "ansible_host": "localhost",
         }
-        _groups = {}
+                
+        _groups[default_ansible_group].append(_localhost)
             
         container_py_interpreter  = "/opt/app-root/bin/python" ;
         if os.path.isfile(container_py_interpreter):
