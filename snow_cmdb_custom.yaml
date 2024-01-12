@@ -3,7 +3,7 @@ plugin: snow_cmdb_custom
 cache: True
 cache_connection: /tmp/inventory
 cache_plugin: jsonfile
-cache_timeout: 3600
+cache_timeout: 7200
 iag_vault_password_file: /tmp/vault_password_file
 snow_vault_encrypted_oauth_credentials: /tmp/vault_lumen_snow
 snow_instance: lumen
@@ -49,4 +49,104 @@ snow_cmdb_classes:
        - hostname
        - ip_address
     ansible_hostname_attrib: ""
+    valid_hostname_only: True
+  cmdb_ci_win_server:
+    groupname: windows_servers
+    req_attribs:
+       - sys_id
+       - sys_class_name
+       - category
+       - subcategory
+       - name
+       - operational_status
+       - install_status
+       - classification
+       - ip_address
+    hostname_scan_order:
+       - fqdn
+       - name
+       - host_name
+       - hostname
+       - ip_address
+    ansible_hostname_attrib: "ip_address"
+    valid_hostname_only: True
+  cmdb_ci_linux_server:
+    groupname: linux_servers
+    req_attribs:
+       - sys_id
+       - sys_class_name
+       - category
+       - subcategory
+       - name
+       - operational_status
+       - install_status
+       - classification
+       - ip_address
+    hostname_scan_order:
+       - fqdn
+       - name
+       - host_name
+       - hostname
+       - ip_address
+    ansible_hostname_attrib: "ip_address"
+    valid_hostname_only: True
+  cmdb_ci_esx_server:
+    groupname: esx_servers
+    req_attribs:
+       - sys_id
+       - sys_class_name
+       - category
+       - subcategory
+       - name
+       - operational_status
+       - install_status
+       - classification
+       - ip_address
+    hostname_scan_order:
+       - fqdn
+       - name
+       - host_name
+       - hostname
+       - ip_address
+    ansible_hostname_attrib: "ip_address"
+    valid_hostname_only: True
+  cmdb_ci_ip_switch:
+    groupname: ip_switches
+    req_attribs:
+       - sys_id
+       - sys_class_name
+       - category
+       - subcategory
+       - name
+       - operational_status
+       - install_status
+       - classification
+       - ip_address
+    hostname_scan_order:
+       - fqdn
+       - name
+       - host_name
+       - hostname
+       - ip_address
+    ansible_hostname_attrib: "ip_address"
+    valid_hostname_only: True
+  cmdb_ci_ip_router:
+    groupname: ip_routers
+    req_attribs:
+       - sys_id
+       - sys_class_name
+       - category
+       - subcategory
+       - name
+       - operational_status
+       - install_status
+       - classification
+       - ip_address
+    hostname_scan_order:
+       - fqdn
+       - name
+       - host_name
+       - hostname
+       - ip_address
+    ansible_hostname_attrib: "ip_address"
     valid_hostname_only: True

@@ -7,16 +7,8 @@ import traceback
 import re
 from pprint import pprint
 
-from snow_cmdb.oauthclient import CredentialsStoreVault, SnowApiAuth, SnowTableApi, SnowCmdbCIGenericParser
-#from snow_cmdb.populate import PopulateMysql
-from cryptography.exceptions import InvalidSignature
-
-from urllib.parse import urlparse
-from urllib.parse import parse_qs
-from urllib.parse import urlencode
-from urllib.parse import urlunparse
-
-import requests
+from snow_cmdb.snowclient import  OAuthCredentials, SnowApiAuth, SnowTableApi, SnowCmdbCIGenericParser
+from snow_cmdb.utils.credentialstore import CredentialsStoreVault
 
 __metaclass__ = type
 
@@ -62,8 +54,7 @@ DOCUMENTATION = r"""
 
 from ansible.errors import AnsibleError, AnsibleParserError
 from ansible.module_utils._text import to_bytes, to_native, to_text
-from ansible.parsing import vault
-from ansible.parsing.vault import VaultSecret
+
 from ansible.plugins.inventory import BaseInventoryPlugin, Cacheable, Constructable
 
 
@@ -233,8 +224,8 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
         
         try:
             credstore = CredentialsStoreVault(encrypted_vault_file, vault_password_file)
-            
-            auth = SnowApiAuth(credstore.get_credentials());
+            credentials = OAuthCredentials(json_data=credstore.get_credentials())
+            auth = SnowApiAuth(credentials);
             
             auth.refresh_token();
             snow_api = SnowTableApi(snow_instance, auth, page_limit=snow_page_limit)
@@ -244,7 +235,7 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
             for cmdb_class  in snow_cmdb_classes:
                 
                 """ add the group mentioned for the class to the inventory"""
-                class_group_name = snow_cmdb_classes[cmdb_class].get("groupname","default");
+                class_group_name = snow_cmdb_classes[cmdb_class].get("groupname","all");
                 _groups[class_group_name] = [] 
                 #self.inventory.add_group(class_group_name)
 

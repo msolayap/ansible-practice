@@ -10,11 +10,6 @@ from datetime import datetime
 from pprint import pprint
 from abc import ABC, abstractmethod
 
-# Ansbile libraries
-from ansible.parsing import vault
-from ansible.parsing.vault import VaultSecret
-from ansible.module_utils._text import to_bytes
-
 # Oauth libraries
 from oauthlib.oauth2 import BackendApplicationClient
 from requests_oauthlib import OAuth2Session
@@ -126,8 +121,7 @@ class OAuthToken:
             """Token still valid"""
             return(False);
                 
-
-class Credentials:
+class OAuthCredentials:
     """Object to represet credentials as a whole"""
 
     def __init__(self, 
@@ -193,7 +187,7 @@ class SnowApiAuth:
 
     """Class to represet authentication object and its actions like refresh_token"""
 
-    def __init__(self, credentials_obj:Credentials):
+    def __init__(self, credentials_obj:OAuthCredentials):
         
         self._credentials = credentials_obj
         oauth_client  = BackendApplicationClient(self._credentials._client_id);
@@ -242,35 +236,6 @@ class SnowApiAuth:
             logging.exception("Error while getting new token")
             
             return(False)
-
-
-class CredentialsStoreVault:
-
-    def __init__(self, vault_file, vault_key_file):
-
-        self._vault_file =  vault_file;
-        self._vault_key_file = vault_key_file
-
-    def get_credentials(self):
-        try:
-            with open(self._vault_key_file, "r") as vkf:
-                vault_password = vkf.read();
-            
-            with open(self._vault_file, "r") as vf:
-                encrypted_data = vf.read()
-                                
-                vault_ref = vault.VaultLib(
-                    [("default", VaultSecret(_bytes=to_bytes(vault_password.strip())))]
-                )
-                
-                decrypted_data = vault_ref.decrypt(encrypted_data.strip())
-
-                if(decrypted_data != None):
-                    return (Credentials(json_data=decrypted_data));
-    
-        except Exception as e:
-            logging.exception("Cannot Open vault_file %s", self._vault_file)
-
 
 class SnowCmdbCIParser(ABC):
 
@@ -349,13 +314,16 @@ class SnowCmdbCIGenericParser(SnowCmdbCIParser):
 
         try:
 
+            print(" ------------ class config received in process record ----------")
+            pprint(class_config)
+            print(" ---------------------------------------------------------------")
+
             # primary identifier to address this CI from top level processes
             # one of the ip_address, fqdn, host_name, name, etc.,
 
             ansible_hostname_attrib = class_config.get('ansible_hostname_attrib',None)
 
             ci_name  = self.get_ci_hostname(class_config['hostname_scan_order']);
-
             
 
             if( class_config.get("valid_hostname_only", False) == True ):
